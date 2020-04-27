@@ -406,11 +406,12 @@ else
 HOSTCC	= gcc
 HOSTCXX	= g++
 endif
-KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 \
+###malaka
+KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -ffast-math -pipe -fPIE \
 		-fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS) \
 		$(HOSTCFLAGS)
-KBUILD_HOSTCXXFLAGS := -Wall -O2 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
-KBUILD_HOSTLDFLAGS  := $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
+KBUILD_HOSTCXXFLAGS := -Wall -O3 -ffast-math $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
+KBUILD_HOSTLDFLAGS  := -O3 $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
 KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 
 # Make variables (CC, etc...)
@@ -476,11 +477,14 @@ LINUXINCLUDE    := \
 		$(USERINCLUDE)
 
 KBUILD_AFLAGS   := -D__ASSEMBLY__ -fno-PIE
-KBUILD_CFLAGS   := -Wall -Wundef -Werror=strict-prototypes -Wno-trigraphs \
+KBUILD_CFLAGS   := -Wall -Wundef  -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common -fshort-wchar -fno-PIE \
-		   -Werror=implicit-function-declaration -Werror=implicit-int \
 		   -Wno-format-security \
 		   -std=gnu89
+		   
+		   ###malaka
+		   #-Werror=strict-prototypes -Werror=implicit-function-declaration -Werror=implicit-int 
+		   
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
@@ -558,7 +562,8 @@ endif
 ifneq ($(LLVM_IAS),1)
 CLANG_FLAGS	+= -no-integrated-as
 endif
-CLANG_FLAGS	+= -Werror=unknown-warning-option
+###malaka
+CLANG_FLAGS	+= -Wno-unknown-warning-option
 KBUILD_CFLAGS	+= $(CLANG_FLAGS)
 KBUILD_AFLAGS	+= $(CLANG_FLAGS)
 export CLANG_FLAGS
@@ -722,12 +727,85 @@ KBUILD_CFLAGS	+= $(call cc-disable-warning, format-overflow)
 KBUILD_CFLAGS	+= $(call cc-disable-warning, address-of-packed-member)
 
 ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE
-KBUILD_CFLAGS += -O2
+KBUILD_CFLAGS += -O3 
 else ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
 KBUILD_CFLAGS += -O3
 else ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
-KBUILD_CFLAGS += -Os
+KBUILD_CFLAGS += -O3
 endif
+
+#####################################################################################
+#####################################################################################
+###THANAS
+
+KBUILD_CFLAGS += -O3 -ffast-math -fforce-addr -mtune=native -march=native \
+-fomit-frame-pointer -pipe -Wno-error \
+-funroll-loops -ftree-vectorize -Wno-frame-address -Wno-maybe-uninitialized
+
+subdir-ccflags-y += $(call cc-disable-warning, frame-address)
+
+LDFLAGS		+= -O3
+LDFLAGS		+= -plugin-opt=-function-sections
+LDFLAGS		+= -plugin-opt=-data-sections
+LDFLAGS		+= -plugin-opt=new-pass-manager
+LDFLAGS		+= --plugin-opt=O3
+LDFLAGS		+= -plugin-opt=mcpu=native
+
+
+
+subdir-ccflags-y := -O3 -ffast-math -fforce-addr
+
+ifeq ($(cc-name),gcc)
+KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
+
+###ldgold
+LDFLAGS	+= -plugin LLVMgold.so
+KBUILD_CFLAGS	+= -fuse-ld=gold
+endif
+
+ifeq ($(cc-name),clang)
+###ldlld
+KBUILD_CFLAGS	+= -fuse-ld=lld
+
+KBUILD_CFLAGS	+= -Wno-uninitialized \
+	$(call cc-disable-warning,maybe-uninitialized,)
+
+KBUILD_CFLAGS	+= -fopenmp 
+KBUILD_CFLAGS	+= -mllvm -polly \
+		   -mllvm -polly-omp-backend=LLVM \
+		   -mllvm -polly-scheduling=dynamic \
+		   -mllvm -polly-scheduling-chunksize=1 \
+		   -mllvm -polly-vectorizer=polly \
+		   -mllvm -polly-opt-fusion=max \
+		   -mllvm -polly-opt-maximize-bands=yes \
+		   -mllvm -polly-run-dce \
+		   -mllvm -polly-position=after-loopopt \
+		   -mllvm -polly-run-inliner \
+		   -mllvm -polly-opt-fusion=max \
+		   -mllvm -polly-ast-use-context \
+		   -mllvm -polly-detect-keep-going \
+		   -mllvm -polly-vectorizer=stripmine \
+		   -mllvm -polly-opt-simplify-deps=no \
+		   -mllvm -polly-rtc-max-arrays-per-group=40 \
+		   -mllvm -polly-invariant-load-hoisting \
+		   -mllvm -polly-vectorizer=polly
+		   
+KBUILD_CPPFLAGS += -Qunused-arguments
+KBUILD_CFLAGS += -Wno-format-invalid-specifier
+KBUILD_CFLAGS += -Wno-gnu
+KBUILD_CFLAGS += -mno-global-merge
+		   
+
+LLVM_AR		:= llvm-ar
+LLVM_DIS	:= llvm-dis
+KBUILD_CFLAGS	+= $(call cc-option,-ffunction-sections,)
+KBUILD_CFLAGS	+= $(call cc-option,-fdata-sections,)
+#LDFLAGS		+= -plugin-opt=-safestack-use-pointer-address
+#KBUILD_CFLAGS	+= -fvisibility=hidden -flto
+endif
+
+#####################################################################################
+#####################################################################################
 
 ifdef CONFIG_CC_DISABLE_WARN_MAYBE_UNINITIALIZED
 KBUILD_CFLAGS   += -Wno-maybe-uninitialized
@@ -750,8 +828,9 @@ KBUILD_CFLAGS += $(call cc-option,-fno-reorder-blocks,) \
                  $(call cc-option,-fno-partial-inlining)
 endif
 
+###malaka
 ifneq ($(CONFIG_FRAME_WARN),0)
-KBUILD_CFLAGS += -Wframe-larger-than=$(CONFIG_FRAME_WARN)
+#KBUILD_CFLAGS += -Wframe-larger-than=$(CONFIG_FRAME_WARN)
 endif
 
 stackp-flags-$(CONFIG_CC_HAS_STACKPROTECTOR_NONE) := -fno-stack-protector
@@ -891,7 +970,10 @@ KBUILD_CFLAGS	+= $(call cc-option,-fno-merge-all-constants)
 
 # for gcc -fno-merge-all-constants disables everything, but it is fine
 # to have actual conforming behavior enabled.
+###malaka
+ifeq ($(cc-name),gcc)
 KBUILD_CFLAGS	+= $(call cc-option,-fmerge-constants)
+endif
 
 # Make sure -fstack-check isn't enabled (like gentoo apparently did)
 KBUILD_CFLAGS  += $(call cc-option,-fno-stack-check,)
@@ -899,14 +981,15 @@ KBUILD_CFLAGS  += $(call cc-option,-fno-stack-check,)
 # conserve stack if available
 KBUILD_CFLAGS   += $(call cc-option,-fconserve-stack)
 
+###malaka
 # Prohibit date/time macros, which would make the build non-deterministic
-KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
+#KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
 
 # enforce correct pointer usage
-KBUILD_CFLAGS   += $(call cc-option,-Werror=incompatible-pointer-types)
+#KBUILD_CFLAGS   += $(call cc-option,-Werror=incompatible-pointer-types)
 
 # Require designated initializers for all marked structures
-KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
+#KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
 
 # change __FILE__ to the relative path from the srctree
 KBUILD_CFLAGS	+= $(call cc-option,-fmacro-prefix-map=$(srctree)/=)
