@@ -406,10 +406,10 @@ else
 HOSTCC	= gcc
 HOSTCXX	= g++
 endif
-KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -ffast-math -pipe -fPIE \
+KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -pipe -fPIE \
 		-fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS) \
 		$(HOSTCFLAGS)
-KBUILD_HOSTCXXFLAGS := -Wall -O3 -ffast-math $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
+KBUILD_HOSTCXXFLAGS := -Wall -O3 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
 KBUILD_HOSTLDFLAGS  := $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
 KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 
@@ -733,7 +733,7 @@ endif
 #####################################################################################
 ###THANAS
 
-KBUILD_CFLAGS += -O3 -ffast-math -fforce-addr -mtune=native -march=native \
+KBUILD_CFLAGS += -O3 -fforce-addr -mtune=native -march=native \
 -fomit-frame-pointer -pipe -Wno-error \
 -funroll-loops -ftree-vectorize 
 
@@ -746,8 +746,6 @@ LDFLAGS		+= -plugin-opt=-data-sections
 LDFLAGS		+= -plugin-opt=new-pass-manager
 LDFLAGS		+= -plugin-opt=mcpu=native
 
-subdir-ccflags-y := -O3 -ffast-math -fforce-addr
-
 ifeq ($(cc-name),gcc)
 KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
 endif
@@ -756,22 +754,9 @@ ifeq ($(cc-name),clang)
 KBUILD_CFLAGS	+= -Wno-uninitialized
 KBUILD_CFLAGS	+= -fopenmp 
 KBUILD_CFLAGS	+= -mllvm -polly \
-		   -mllvm -polly-omp-backend=LLVM \
-		   -mllvm -polly-scheduling=dynamic \
-		   -mllvm -polly-scheduling-chunksize=1 \
-		   -mllvm -polly-vectorizer=polly \
-		   -mllvm -polly-opt-fusion=max \
-		   -mllvm -polly-opt-maximize-bands=yes \
 		   -mllvm -polly-run-dce \
-		   -mllvm -polly-position=after-loopopt \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-opt-fusion=max \
-		   -mllvm -polly-ast-use-context \
-		   -mllvm -polly-detect-keep-going \
-		   -mllvm -polly-vectorizer=stripmine \
-		   -mllvm -polly-opt-simplify-deps=no \
-		   -mllvm -polly-rtc-max-arrays-per-group=40 \
-		   -mllvm -polly-invariant-load-hoisting \
 		   -mllvm -polly-vectorizer=polly
 		   
 KBUILD_CPPFLAGS += -Qunused-arguments
