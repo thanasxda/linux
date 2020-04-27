@@ -22,9 +22,6 @@ export USE_CCACHE=1
 export USE_PREBUILT_CACHE=1
 export PREBUILT_CACHE_DIR=~/.ccache
 export CCACHE_DIR=~/.ccache
-ccache -M 30G
-export KBUILD_BUILD_USER=thanas
-export KBUILD_BUILD_HOST=MLX
 THREADS=-j$(nproc --all)
 #VERBOSE="V=1"
 rm -rf .config
