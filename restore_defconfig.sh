@@ -20,12 +20,12 @@ ccache -M 30G
 THREADS=-j$(nproc --all)
 CLANG="CC=clang HOSTCC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf OBJSIZE=llvm-size STRIP=llvm-strip"
 #VERBOSE="V=1"
-stableconfig=thanas_defconfig
+stableconfig=config-5.6.7-050607-generic
 sudo rm -rf .config
 sudo rm -rf .config.old
-cp $stableconfig .config
+cp /boot/$stableconfig .config
 make localmodconfig
-make menuconfig
+#make menuconfig
 sudo make $THREADS $VERBOSE $CLANG            
 sudo make $THREADS modules
 sudo make $THREADS modules_install
