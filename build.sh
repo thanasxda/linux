@@ -1,5 +1,7 @@
 #!/bin/bash
 
+clear
+
 # Fetch kernel version from makefile -By TwistedPrime
 
 makefile="$(pwd)/Makefile"
