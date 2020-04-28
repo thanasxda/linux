@@ -26,16 +26,16 @@ export PREBUILT_CACHE_DIR=~/.ccache
 export CCACHE_DIR=~/.ccache
 THREADS=-j$(nproc --all)
 config=twisted_defconfig
-#VERBOSE="V=1"
 rm -rf .config
 rm -rf .config.old
 cp $config .config
 make localmodconfig
 #make menuconfig
-sudo make $THREADS $VERBOSE 
+sudo make $THREADS
 sudo make $THREADS modules
 sudo make $THREADS modules_install
 sudo make $THREADS install
+cd /boot
 sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
 sudo update-grub
 echo YOU CAN REBOOT RN...
