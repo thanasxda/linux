@@ -11,6 +11,16 @@ SUBLEVEL=$(echo "$SUBLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 EXTRAVERSION=$(echo "$EXTRAVERSION" | awk -v FPAT="[0-9]+" '{print $NF}')
 KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
 
+DATE_START=$(date +"%s")
+yellow="\033[1;93m" 
+magenta="\033[05;1;95m"
+restore="\033[0m"
+echo -e "${magenta}"
+echo ΜΑΛΆΚΑΣ KERNEL
+echo -e "${yellow}"
+make kernelversion 
+echo -e "${restore}"
+
 sudo cd
 export USE_CCACHE=1
 export USE_PREBUILT_CACHE=1
@@ -33,4 +43,16 @@ sudo make $THREADS install
 cd /boot
 sudo mkinitramfs -ko initrd.img-$KERNELVERSION* $KERNELVERSION*
 sudo update-grub
+echo ...
 echo YOU CAN REBOOT RN...
+
+echo -e "${yellow}"
+cat include/generated/compile.h
+echo "-------------------"
+echo "Build Completed in:"
+echo "-------------------"
+DATE_END=$(date +"%s")
+DIFF=$(($DATE_END - $DATE_START))
+echo -e "${magenta}"
+echo "Time: $(($DIFF / 60)) minute(s) and $(($DIFF % 60)) seconds."
+echo -e "${restore}"
