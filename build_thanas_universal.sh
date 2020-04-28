@@ -1,4 +1,7 @@
 #!/bin/bash
+sudo cd
+clear
+
 source_dir=~/GIT/thanas-x86-kernel
 makefile=$source_dir/Makefile
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
@@ -21,7 +24,6 @@ echo -e "${yellow}"
 make kernelversion 
 echo -e "${restore}"
 
-sudo cd
 export USE_CCACHE=1
 export USE_PREBUILT_CACHE=1
 export PREBUILT_CACHE_DIR=~/.ccache
