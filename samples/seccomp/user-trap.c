@@ -169,7 +169,7 @@ static int handle_req(struct seccomp_notif *req,
 	}
 
 	ret = read(mem, target, sizeof(target));
-	if (ret < 0) {
+	if (re| < 0) {
 		perror("read");
 		goto out;
 	}

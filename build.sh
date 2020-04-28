@@ -2,7 +2,8 @@
 sudo cd
 clear
 
-source_dir=~/GIT/thanas-x86-kernel
+source_dir=/home/x/GIT/thanas-x86-64-kernel
+
 makefile=$source_dir/Makefile
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
 PATCHLEVEL=$(cat $makefile | head -3 | tail -1 | cut -d '=' -f2)
@@ -43,13 +44,13 @@ sudo make $THREADS modules
 sudo make $THREADS modules_install
 sudo make $THREADS install
 cd /boot
-sudo mkinitramfs -ko initrd.img-$KERNELVERSION* $KERNELVERSION*
+sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
 sudo update-grub
 echo ...
 echo YOU CAN REBOOT RN...
 
 echo -e "${yellow}"
-cat include/generated/compile.h
+cat $source_dir/include/generated/compile.h
 echo "-------------------"
 echo "Build Completed in:"
 echo "-------------------"

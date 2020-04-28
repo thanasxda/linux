@@ -1,5 +1,9 @@
 #!/bin/bash
-source_dir=~/GIT/thanas-x86-kernel
+sudo cd
+clear
+
+source_dir=/home/x/GIT/thanas-x86-64-kernel
+
 makefile=$source_dir/Makefile
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
 PATCHLEVEL=$(cat $makefile | head -3 | tail -1 | cut -d '=' -f2)
@@ -11,8 +15,7 @@ SUBLEVEL=$(echo "$SUBLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 EXTRAVERSION=$(echo "$EXTRAVERSION" | awk -v FPAT="[0-9]+" '{print $NF}')
 KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
 
-K1=$KERNELVERSION*
-sudo cd
+K1=$KERNELVERSION
 sudo rm -rf /boot/vmlinuz-$K1
 sudo rm -rf /boot/initrd-$K1
 sudo rm -rf /boot/System-map-$K1
