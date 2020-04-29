@@ -8,7 +8,7 @@ sudo rm -rf .config.old
 cp $stableconfig .config
 ### enable underneath to regenerate a system specific transposed defconfig 
 #make localmodconfig
-make $CLANG menuconfig
+make menuconfig
 cp .config $stableconfig
 clear
 echo DONE
