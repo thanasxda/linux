@@ -4,6 +4,8 @@ clear
 
 source_dir="$(pwd)"
 
+makefile=$source_dir/Makefile
+
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
 PATCHLEVEL=$(cat $makefile | head -3 | tail -1 | cut -d '=' -f2)
 SUBLEVEL=$(cat $makefile | head -4 | tail -1 | cut -d '=' -f2)

@@ -2,7 +2,6 @@
 sudo cd
 clear
 
-
 makefile="$(pwd)/Makefile"
 
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
