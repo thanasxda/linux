@@ -1,5 +1,9 @@
 #!/bin/bash
 
+function msg() {
+    echo -e "\e[1;32m$@\e[0m"
+}
+
 clear
 
 # Fetch kernel version from makefile -By TwistedPrime
@@ -19,23 +23,46 @@ KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
 
 #
 
+msg "Kernel version: $KERNELVERSION"
+
 sudo cd
+
+msg "Removing old configs..."
+
+rm -rf .config
+rm -rf .config.old
+
+msg "Preparing for compilation..."
+
 export USE_CCACHE=1
 export USE_PREBUILT_CACHE=1
 export PREBUILT_CACHE_DIR=~/.ccache
 export CCACHE_DIR=~/.ccache
 THREADS=-j$(nproc --all)
 config=twisted_defconfig
-rm -rf .config
-rm -rf .config.old
+
 cp $config .config
 make localmodconfig
 #make menuconfig
+
+msg "Compiling kernel..."
+
 sudo make $THREADS
+
+msg "Compiling modules..."
+
 sudo make $THREADS modules
+
+msg "Installing modules..."
+
 sudo make $THREADS modules_install
+
+msg "Installing kernel..."
+
 sudo make $THREADS install
+
 cd /boot
 sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
 sudo update-grub
-echo YOU CAN REBOOT RN...
+
+msg "Compilation done, reboot to apply changes..."
