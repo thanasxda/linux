@@ -61,3 +61,8 @@ DIFF=$(($DATE_END - $DATE_START))
 echo -e "${magenta}"
 echo "Time: $(($DIFF / 60)) minute(s) and $(($DIFF % 60)) seconds."
 echo -e "${restore}"
+
+read -p "Press Enter to reboot or Ctrl+C to cancel"
+
+reboot
+
