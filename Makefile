@@ -742,6 +742,8 @@ KBUILD_CFLAGS += -O3 -ffast-math -fforce-addr -mtune=native -march=native \
 -fomit-frame-pointer -pipe -Wno-error \
 -funroll-loops -ftree-vectorize -Wno-frame-address -Wno-maybe-uninitialized
 
+KBUILD_CFLAGS	+= -fopenmp 
+
 subdir-ccflags-y += $(call cc-disable-warning, frame-address)
 
 LDFLAGS		+= -O3
@@ -751,10 +753,10 @@ LDFLAGS		+= -plugin-opt=new-pass-manager
 LDFLAGS		+= --plugin-opt=O3
 LDFLAGS		+= -plugin-opt=mcpu=native
 
-
-
 subdir-ccflags-y := -O3 -ffast-math -fforce-addr
 
+
+### GCC SETUP
 ifeq ($(cc-name),gcc)
 KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
 
@@ -763,6 +765,7 @@ LDFLAGS	+= -plugin LLVMgold.so
 KBUILD_CFLAGS	+= -fuse-ld=gold
 endif
 
+### CLANG SETUP
 ifeq ($(cc-name),clang)
 ###ldlld
 KBUILD_CFLAGS	+= -fuse-ld=lld
@@ -770,7 +773,6 @@ KBUILD_CFLAGS	+= -fuse-ld=lld
 KBUILD_CFLAGS	+= -Wno-uninitialized \
 	$(call cc-disable-warning,maybe-uninitialized,)
 
-KBUILD_CFLAGS	+= -fopenmp 
 KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-omp-backend=LLVM \
 		   -mllvm -polly-scheduling=dynamic \
