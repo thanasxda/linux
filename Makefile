@@ -399,14 +399,12 @@ HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS 2>/dev/null)
 HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
-
 ifneq ($(LLVM),)
 HOSTCC	= clang
 HOSTCXX	= clang++
 else
-+HOSTCC       = icc
-+HOSTCXX      = icpc
-+HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -no-vec -fomit-frame-pointer
+HOSTCC	= gcc
+HOSTCXX	= g++
 endif
 ###malaka
 KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -ffast-math -pipe -fPIE \
@@ -415,7 +413,6 @@ KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -ffast
 KBUILD_HOSTCXXFLAGS := -Wall -O3 -ffast-math $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
 KBUILD_HOSTLDFLAGS  := -O3 $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
 KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
-
 
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
@@ -430,13 +427,15 @@ READELF		= llvm-readelf
 OBJSIZE		= llvm-size
 STRIP		= llvm-strip
 else
-CC=/opt/intel/sw_dev_tools/bin/icc
-HOSTCC=/opt/intel/sw_dev_tools/bin/icc 
-CPP=/opt/intel/sw_dev_tools/bin/icc -E 
-CXXCPP=/opt/intel/sw_dev_tools/bin/icpc -E 
-CXX=/opt/intel/sw_dev_tools/bin/icpc 
-AR=/opt/intel/sw_dev_tools/bin/xiar 
-LD=/opt/intel/sw_dev_tools/bin/xild
+CC		= $(CROSS_COMPILE)gcc
+LD		= $(CROSS_COMPILE)ld
+AR		= $(CROSS_COMPILE)ar
+NM		= $(CROSS_COMPILE)nm
+OBJCOPY		= $(CROSS_COMPILE)objcopy
+OBJDUMP		= $(CROSS_COMPILE)objdump
+READELF		= $(CROSS_COMPILE)readelf
+OBJSIZE		= $(CROSS_COMPILE)size
+STRIP		= $(CROSS_COMPILE)strip
 endif
 PAHOLE		= pahole
 LEX		= flex
@@ -756,11 +755,6 @@ LDFLAGS		+= -plugin-opt=mcpu=native
 
 subdir-ccflags-y := -O3 -ffast-math -fforce-addr
 
-### INTEL C COMPILER
-ifeq ($(cc-name),icc)
-KBUILD_CFLAGS += -frename-registers-fno-unit-at-a-time-msoft-float-mfloat-abi-gstabs
-KBUILD_CFLAGS += -mno-mmx-mno-sse2-mno-sse3
-endif
 
 ### GCC SETUP
 ifeq ($(cc-name),gcc)
