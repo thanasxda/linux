@@ -1920,7 +1920,7 @@ config SLUB_CPU_PARTIAL
 config MMAP_ALLOW_UNINITIALIZED
 	bool "Allow mmapped anonymous memory to be uninitialized"
 	depends on EXPERT && !MMU
-	default n
+	default y
 	help
 	  Normally, and according to the Linux spec, anonymous memory obtained
 	  from mmap() has its contents cleared before it is passed to
