@@ -403,7 +403,7 @@ ifneq ($(LLVM),)
 HOSTCC	= clang
 HOSTCXX	= clang++
 else
-HOSTCC	= gcc-10
+HOSTCC	= gcc
 HOSTCXX	= g++
 endif
 ###malaka
@@ -427,10 +427,10 @@ READELF		= llvm-readelf
 OBJSIZE		= llvm-size
 STRIP		= llvm-strip
 else
-CC		= $(CROSS_COMPILE)gcc-10
+CC		= $(CROSS_COMPILE)gcc
 LD		= $(CROSS_COMPILE)ld
-AR		= $(CROSS_COMPILE)gcc-ar-10
-NM		= $(CROSS_COMPILE)gcc-nm-10
+AR		= $(CROSS_COMPILE)ar
+NM		= $(CROSS_COMPILE)nm
 OBJCOPY		= $(CROSS_COMPILE)objcopy
 OBJDUMP		= $(CROSS_COMPILE)objdump
 READELF		= $(CROSS_COMPILE)readelf
@@ -763,14 +763,6 @@ KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribut
 ###ldgold
 LDFLAGS	+= -plugin LLVMgold.so
 KBUILD_CFLAGS	+= -fuse-ld=gold
-endif
-
-ifeq ($(cc-name),gcc-10)
-KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
-
-###
-LDFLAGS	+= -plugin LLVMgold.so
-#KBUILD_CFLAGS	+= -fuse-ld=lld
 endif
 
 ### CLANG SETUP
