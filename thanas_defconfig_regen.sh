@@ -1,5 +1,4 @@
 #!/bin/bash
-sudo cd
 clear
 stableconfig=thanas_defconfig
 sudo rm -rf .config
