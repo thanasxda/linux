@@ -1,7 +1,4 @@
 #!/bin/bash
-sudo cd
-clear
-
 makefile="$(pwd)/Makefile"
 
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
@@ -12,9 +9,7 @@ VERSION=$(echo "$VERSION" | awk -v FPAT="[0-9]+" '{print $NF}')
 PATCHLEVEL=$(echo "$PATCHLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 SUBLEVEL=$(echo "$SUBLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 EXTRAVERSION="$(echo -e "${EXTRAVERSION}" | sed -e 's/^[[:space:]]*//')"
-
 KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
-
 K1=$KERNELVERSION-*
 K2=$KERNELVERSION+*
 
@@ -35,3 +30,8 @@ sudo rm -rf /lib/modules/$K2/
 sudo rm -rf /var/lib/initramfs/$K2/
 sudo rm -rf /var/lib/initramfs-tools/$K1
 sudo update-grub
+
+echo ...
+echo ...
+echo ...
+echo ALL MANUALLY COMPILED KERNELS UNINSTALLED
