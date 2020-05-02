@@ -790,7 +790,6 @@ KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-opt-simplify-deps=no \
 		   -mllvm -polly-rtc-max-arrays-per-group=40 \
 		   -mllvm -polly-invariant-load-hoisting \
-		   -mllvm -polly-vectorizer=polly
 		   
 KBUILD_CPPFLAGS += -Qunused-arguments
 KBUILD_CFLAGS += -Wno-format-invalid-specifier
