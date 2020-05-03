@@ -747,7 +747,6 @@ static const struct intel_device_info kbl_gt3_info = {
 
 #define CFL_PLATFORM \
 	GEN9_FEATURES, \
-	.display.has_fbc = 0, \
 	PLATFORM(INTEL_COFFEELAKE)
 
 static const struct intel_device_info cfl_gt1_info = {
