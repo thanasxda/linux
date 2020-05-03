@@ -34,11 +34,11 @@ echo -e "${restore}"
 THREADS=-j$(nproc --all)
 ### HASH OUT #CLANG UNDERNEATH TO BUILD WITH GCC INSTEAD
 CLANG="CC=clang HOSTCC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf OBJSIZE=llvm-size STRIP=llvm-strip"
-#CLANGP=~/TOOLCHAIN/clang
+paths=/usr/bin
 #LD="LD=ld.lld"
 #VERBOSE="V=1"
-#export LD_LIBRARY_PATH="$CLANGP/../lib:$CLANGP/../lib64:$LD_LIBRARY_PATH"
-#export PATH="$CLANGP:$PATH"
+export LD_LIBRARY_PATH="$paths/../lib:$paths/../lib64:$LD_LIBRARY_PATH"
+export PATH="$paths:$PATH"
 stableconfig=thanas_defconfig
 sudo rm -rf .config
 sudo rm -rf .config.old
