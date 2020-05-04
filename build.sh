@@ -43,12 +43,12 @@ stableconfig=thanas_defconfig
 sudo rm -rf .config
 sudo rm -rf .config.old
 cp $stableconfig .config
-make localmodconfig
+Keys.ENTER | make localmodconfig
 #make menuconfig
-sudo make $THREADS $VERBOSE $CLANG $LD           
-sudo make $THREADS modules
-sudo make $THREADS modules_install
-sudo make $THREADS install
+Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD           
+Keys.ENTER | sudo make $THREADS modules
+Keys.ENTER | sudo make $THREADS modules_install
+Keys.ENTER | sudo make $THREADS install
 cd /boot
 sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
 sudo update-grub
