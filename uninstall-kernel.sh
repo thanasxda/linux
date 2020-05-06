@@ -30,6 +30,7 @@ sudo rm -rf /lib/modules/$K2/
 sudo rm -rf /var/lib/initramfs/$K2/
 sudo rm -rf /var/lib/initramfs-tools/$K1
 sudo update-grub
+sudo rm -rf /init.sh
 
 echo ...
 echo ...
