@@ -1,7 +1,8 @@
 #!/bin/bash
 #$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
-sda=sda
-nvme=nvme0n1
+sda=sd*
+nvme=nvme*
+
 echo "bfq" > /sys/block/$sda/queue/scheduler
 echo "0" > /sys/block/$sda/queue/add_random
 echo "0" > /sys/block/$sda/queue/iostats
