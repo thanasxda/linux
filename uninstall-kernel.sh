@@ -29,10 +29,13 @@ sudo rm -rf /boot/config-$K2
 sudo rm -rf /lib/modules/$K2/
 sudo rm -rf /var/lib/initramfs/$K2/
 sudo rm -rf /var/lib/initramfs-tools/$K1
-sudo update-grub
 sudo rm -rf /init.sh
+sudo sed -i '10s/.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
+sudo update-grub
+GRUB_PATH=$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
+sudo grub-install $GRUB_PATH
 
 echo ...
 echo ...
 echo ...
-echo ALL MANUALLY COMPILED KERNELS UNINSTALLED
+echo ALL MANUALLY COMPILED KERNELS UNINSTALLED AND ALL OPTIMIZATIONS REVERTED

@@ -57,6 +57,13 @@ cd $source_dir
 chmod +x init.sh
 sudo \cp init.sh /init.sh
 sudo sed -i '1s#.*#@reboot root /init.sh#' /etc/crontab
+### switch off mitigations improving linux performance
+sudo sed -i '10s/.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash noibrs noibpb nopti nospectre_v2 nospectre_v1 l1tf=off nospec_store_bypass_disable no_stf_barrier mds=off spectre_v2_user=off spec_store_bypass_disable=off mitigations=off scsi_mod.use_blk_mq=1"/' /etc/default/grub
+### apply grub settings
+sudo update-grub
+### grub auto detection
+GRUB_PATH=$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
+sudo grub-install $GRUB_PATH
 ### display build completion
 echo ...
 echo ...
