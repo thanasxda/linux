@@ -53,6 +53,10 @@ cd /boot
 sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
 sudo update-grub
 ### set up init.sh for kernel configuration
+echo -e "${yellow}"
+echo setting up userspace kernel configuration
+echo on root filesystem /init.sh can be found, adjust it to your needs
+echo -e "${restore}"
 cd $source_dir
 chmod +x init.sh
 sudo \cp init.sh /init.sh
