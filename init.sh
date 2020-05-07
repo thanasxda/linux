@@ -3,14 +3,14 @@
 ### THIS FILE WILL BE LOCATED IN ROOT FILESYSTEM "/init.sh"
 ######################################################################
 
-### CONFIGURE SCHEDULER
+###### CONFIGURE SCHEDULER
 
 ### configure paths for scheduler
 #$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
 sd=sd*
 nvme=nvme*
 
-### FOR SD*
+#### FOR SD*
 ### currently [none], [kyber], [bfq], [mq-deadline]
 echo "none" > /sys/block/$sd/queue/scheduler
 ### if scheduler is set underneath options can configure it
@@ -36,7 +36,7 @@ echo "0" > /sys/block/$sd/queue/iosched/group_idle
 echo "1" > /sys/block/$sd/queue/iosched/low_latency
 echo "150" > /sys/block/$sd/queue/iosched/target_latency
 
-### FOR NVME*
+#### FOR NVME*
 ### currently [none], [kyber], [bfq], [mq-deadline]
 echo "none" > /sys/block/$nvme/queue/scheduler
 ### if scheduler is set underneath options can configure it
@@ -62,4 +62,4 @@ echo "0" > /sys/block/$nvme/queue/iosched/group_idle
 echo "1" > /sys/block/$nvme/queue/iosched/low_latency
 echo "150" > /sys/block/$nvme/queue/iosched/target_latency
 
-### END
+###### END

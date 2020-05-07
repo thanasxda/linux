@@ -3,13 +3,13 @@
 ### built with llvm/clang by default
 ###########################################################
 
-### SET BASH COLORS AND CONFIGURE COMPILATION TIME DISPLAY
+###### SET BASH COLORS AND CONFIGURE COMPILATION TIME DISPLAY
 DATE_START=$(date +"%s")
 yellow="\033[1;93m"
 magenta="\033[05;1;95m"
 restore="\033[0m"
 
-### UPGRADE COMPILERS PRIOR TO COMPILATION
+###### UPGRADE COMPILERS PRIOR TO COMPILATION
 echo -e "${yellow}"
 echo "UPDATING CURRENT COMPILERS PRIOR TO INSTALLATION"
 echo "ENSURING THE KERNEL IS ALWAYS BUILT WITH THE LATEST COMPILERS"
@@ -18,18 +18,18 @@ sudo apt -f upgrade -y clang-11
 sudo apt -f upgrade -y gcc-10
 sudo apt -f upgrade -y gcc clang binutils make flex bison bc build-essential libncurses-dev  libssl-dev libelf-dev qt5-default
 
-### SET UP CCACHE
+###### SET UP CCACHE
 export USE_CCACHE=1
 export USE_PREBUILT_CACHE=1
 export PREBUILT_CACHE_DIR=~/.ccache
 export CCACHE_DIR=~/.ccache
 ccache -M 30G
 
-### SET UP DIRS
+###### SET UP DIRS
 source_dir="$(pwd)"
 makefile=$source_dir/Makefile
 
-### AUTO VERSIONING
+###### AUTO VERSIONING
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
 PATCHLEVEL=$(cat $makefile | head -3 | tail -1 | cut -d '=' -f2)
 SUBLEVEL=$(cat $makefile | head -4 | tail -1 | cut -d '=' -f2)
@@ -40,7 +40,7 @@ SUBLEVEL=$(echo "$SUBLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 EXTRAVERSION="$(echo -e "${EXTRAVERSION}" | sed -e 's/^[[:space:]]*//')"
 KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"-thanas+
 
-### DISPLAY KERNEL VERSION
+###### DISPLAY KERNEL VERSION
 clear
 echo -e "${magenta}"
 echo - THANAS X86-64 KERNEL -
@@ -48,7 +48,7 @@ echo -e "${yellow}"
 make kernelversion
 echo -e "${restore}"
 
-### COMPILER CONFIGURATION
+###### COMPILER CONFIGURATION
 ### hash out "#clang" underneath to switch compiler from clang to gcc optionally
 CLANG="CC=clang HOSTCC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf OBJSIZE=llvm-size STRIP=llvm-strip"
 ### optionally set linker seperately
@@ -58,14 +58,14 @@ CLANG="CC=clang HOSTCC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcop
 ### ensure all cpu threads are used for compilation
 THREADS=-j$(nproc --all)
 
-### OPTIONAL PREBUILT COMPILER CONFIG
+###### OPTIONAL PREBUILT COMPILER CONFIG
 ### set up paths in case of prebuilt compiler usage
 paths=/usr/bin
 export LD_LIBRARY_PATH="$paths/../lib:$paths/../lib64:$LD_LIBRARY_PATH"
 export PATH="$paths:$PATH"
 #export CROSS_COMPILE=
 
-### SETUP KERNEL CONFIG
+###### SETUP KERNEL CONFIG
 stableconfig=thanas_defconfig
 sudo rm -rf .config
 sudo rm -rf .config.old
@@ -78,20 +78,20 @@ Keys.ENTER | make localmodconfig
 ### optionally use the included "stock_defconfig" for a stock kernel configuration built on this source
 ### for this to function with the "build.sh" rename "stock_defconfig" and replace "thanas_defconfig" with it
 #make menuconfig
-### or apply "make xconfig" to configure it graphically
+### or apply "make xconfig" instead of menuconfig to configure it graphically
 #make xconfig
 
-### START COMPILATION
+###### START COMPILATION
 Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD
 Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD modules
 
-### START AUTO INSTALLATION
+###### START AUTO INSTALLATION
 Keys.ENTER | sudo make $THREADS modules_install
 Keys.ENTER | sudo make $THREADS install
 cd /boot
 sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
 
-### SETTING UP SYSTEM CONFIGURATION
+###### SETTING UP SYSTEM CONFIGURATION
 ### set up init.sh for kernel configuration
 echo -e "${yellow}"
 echo "setting up userspace kernel configuration & system optimizations"
@@ -110,7 +110,7 @@ sudo update-grub
 GRUB_PATH=$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
 sudo grub-install $GRUB_PATH
 
-### COMPLETION
+###### COMPLETION
 echo ...
 echo ...
 echo ...
@@ -130,4 +130,4 @@ read -p "Press Enter to reboot or Ctrl+C to cancel"
 
 sudo reboot
 
-### END
+###### END

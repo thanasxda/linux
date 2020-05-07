@@ -2,7 +2,12 @@
 ### KERNEL UNINSTALL SCRIPT
 ###########################
 
-### DETECT CURRENT(only) VERSIONING
+###### SET BASH COLORS
+yellow="\033[1;93m"
+magenta="\033[05;1;95m"
+restore="\033[0m"
+
+###### DETECT CURRENT PATCHLEVEL VERSIONING ONLY - for safety 
 makefile="$(pwd)/Makefile"
 
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
@@ -12,45 +17,54 @@ EXTRAVERSION=$(cat $makefile | head -5 | tail -1 | cut -d '=' -f2)
 VERSION=$(echo "$VERSION" | awk -v FPAT="[0-9]+" '{print $NF}')
 PATCHLEVEL=$(echo "$PATCHLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 SUBLEVEL=$(echo "$SUBLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
-EXTRAVERSION="$(echo -e "${EXTRAVERSION}" | sed -e 's/^[[:space:]]*//')"
-KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
+#EXTRAVERSION="$(echo -e "${EXTRAVERSION}" | sed -e 's/^[[:space:]]*//')"
+#KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
+RC_KERNEL="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"-rc*
 
 ### for deletion of a specific version or older than current version
-### input kernelname into one of the K1/2="name_here" underneath
-K1=$KERNELVERSION-*
-K2=$KERNELVERSION+*
+### input kernelname into one of the "manual='name_here'" underneath
+manual='name_here'
 
-### KERNEL REMOVAL
-sudo rm -rf /boot/vmlinuz-$K1
-sudo rm -rf /boot/initrd-$K1
-sudo rm -rf /boot/initrd.img-$K1
-sudo rm -rf /boot/System.map-$K1
-sudo rm -rf /boot/config-$K1
-sudo rm -rf /lib/modules/$K1/
-sudo rm -rf /var/lib/initramfs/$K1/
-sudo rm -rf /var/lib/initramfs-tools/$K1
-sudo rm -rf /boot/vmlinuz-$K2
-sudo rm -rf /boot/initrd-$K2
-sudo rm -rf /boot/initrd.img-$K2
-sudo rm -rf /boot/System.map-$K2
-sudo rm -rf /boot/config-$K2
-sudo rm -rf /lib/modules/$K2/
-sudo rm -rf /var/lib/initramfs/$K2/
-sudo rm -rf /var/lib/initramfs-tools/$K1
+echo -e "${magenta}"
+echo REMOVING ALL INSTALLED RELEASE CANDIDATE WITH VESIONING $RC_KERNEL KERNELS FOUND ON THE SYSTEM VERSIONS!
+echo -e "${yellow}"
+echo for safety avoiding removing any stock kernels open the "/uninstall-kernel.sh" script and insert your previous patchlevel manually if needed under "manual='name_here'"
+echo -e "${restore}"
 
-### INIT.SH KERNEL PRECONFIG SCRIPT REMOVAL
+###### KERNEL REMOVAL
+sudo rm -rf /boot/vmlinuz-$RC_KERNEL
+sudo rm -rf /boot/initrd-$RC_KERNEL
+sudo rm -rf /boot/initrd.img-$RC_KERNEL
+sudo rm -rf /boot/System.map-$RC_KERNEL
+sudo rm -rf /boot/config-$RC_KERNEL
+sudo rm -rf /lib/modules/$RC_KERNEL/
+sudo rm -rf /var/lib/initramfs/$RC_KERNEL/
+sudo rm -rf /var/lib/initramfs-tools/$RC_KERNEL
+
+sudo rm -rf /boot/vmlinuz-$manual
+sudo rm -rf /boot/initrd-$manual
+sudo rm -rf /boot/initrd.img-$manual
+sudo rm -rf /boot/System.map-$manual
+sudo rm -rf /boot/config-$manual
+sudo rm -rf /lib/modules/$manual/
+sudo rm -rf /var/lib/initramfs/$manual/
+sudo rm -rf /var/lib/initramfs-tools/$manual
+
+###### INIT.SH KERNEL PRECONFIG SCRIPT REMOVAL
 sudo rm -rf /init.sh
 
-### SYSTEM OPTIMIZATION REVERSAL TO STOCK
+###### SYSTEM OPTIMIZATION REVERSAL TO STOCK
 sudo sed -i '10s/.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
 sudo update-grub
 GRUB_PATH=$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
 sudo grub-install $GRUB_PATH
 
-### COMPLETION
+###### COMPLETION
+echo -e "${yellow}"
 echo ...
 echo ...
 echo ...
-echo ALL MANUALLY COMPILED KERNELS UNINSTALLED AND ALL OPTIMIZATIONS REVERTED
+echo ALL $RC_KERNEL KERNELS UNINSTALLED AND ALL OPTIMIZATIONS REVERTED
+echo -e "${restore}"
 
-### END
+###### END

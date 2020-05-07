@@ -1,6 +1,13 @@
-THANAS-x84-64-KERNEL - MODDED FORK OF TORVALDS DEV GIT
+thanas-x86-64-kernel
+====================
+modded fork of torvalds dev git.
+automated ./build.sh & installation process. contains uninstall script.
+extended instructions can be found in every script.
 
-============
+also preconfigured in:
+- [basic-linux-setup](https://github.com/thanasxda/basic-linux-setup.git)
+
+
 Linux kernel
 ============
 

@@ -2,7 +2,16 @@
 ### REGENERATION SCRIPT FOR "thanas_defconfig" OPTIONALLY RUN TO CHANGE CONFIGURATION
 #####################################################################################
 
-### KERNEL DEFCONFIG SELECTION
+###### SET BASH COLORS
+yellow="\033[1;93m"
+magenta="\033[05;1;95m"
+restore="\033[0m"
+
+echo -e "${magenta}"
+echo OPENING UP KERNEL CONFIGURATION
+echo -e "${restore}"
+
+###### KERNEL DEFCONFIG SELECTION
 #stableconfig=stock_defoncfig
 stableconfig=thanas_defconfig
 rm -rf .config
@@ -16,10 +25,15 @@ cp $stableconfig .config
 ### enter kernel configuration. optionally apply changes and press save
 ### the newly generated config will replace "thanas_defconfig" by default!
 ### optionally replace "make menuconfig" with "make xconfig" for a graphical approach
-#make xconfig
-make menuconfig
+### compiler used CC=clang - as to show up correctly
+#make CC=clang xconfig
+make CC=clang menuconfig
 cp .config $stableconfig
-clear
-echo KERNEL DEFCONFIG REGENERATED
 
-### END
+###### COMPLETION
+clear
+echo -e "${yellow}"
+echo KERNEL DEFCONFIG REGENERATED
+echo -e "${restore}"
+
+###### END
