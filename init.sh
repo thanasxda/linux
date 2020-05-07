@@ -1,8 +1,16 @@
 #!/bin/bash
+### INIT.SH USERSPACE PRECONFIGURATION SCRIPT FOR THANAS-X86-64-KERNEL
+### THIS FILE WILL BE LOCATED IN ROOT FILESYSTEM "/init.sh"
+######################################################################
+
+### CONFIGURE SCHEDULER
+
+### configure paths for scheduler
 #$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
 sda=sd*
 nvme=nvme*
 
+### for sd*
 echo "bfq" > /sys/block/$sda/queue/scheduler
 echo "0" > /sys/block/$sda/queue/add_random
 echo "0" > /sys/block/$sda/queue/iostats
@@ -26,6 +34,7 @@ echo 0 > /sys/block/$sda/queue/iosched/group_idle
 echo 1 > /sys/block/$sda/queue/iosched/low_latency
 echo 150 > /sys/block/$sda/queue/iosched/target_latency
 
+### for nvme*
 echo "bfq" > /sys/block/$nvme/queue/scheduler
 echo "0" > /sys/block/$nvme/queue/add_random
 echo "0" > /sys/block/$nvme/queue/iostats
@@ -48,3 +57,5 @@ echo 0 > /sys/block/$nvme/queue/iosched/slice_idle
 echo 0 > /sys/block/$nvme/queue/iosched/group_idle
 echo 1 > /sys/block/$nvme/queue/iosched/low_latency
 echo 150 > /sys/block/$nvme/queue/iosched/target_latency
+
+### END
