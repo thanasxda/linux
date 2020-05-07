@@ -11,7 +11,7 @@ sda=sd*
 nvme=nvme*
 
 ### for sd*
-echo "bfq" > /sys/block/$sda/queue/scheduler
+echo "none" > /sys/block/$sda/queue/scheduler
 echo "0" > /sys/block/$sda/queue/add_random
 echo "0" > /sys/block/$sda/queue/iostats
 echo "0" > /sys/block/$sda/queue/io_poll
@@ -35,7 +35,7 @@ echo 1 > /sys/block/$sda/queue/iosched/low_latency
 echo 150 > /sys/block/$sda/queue/iosched/target_latency
 
 ### for nvme*
-echo "bfq" > /sys/block/$nvme/queue/scheduler
+echo "none" > /sys/block/$nvme/queue/scheduler
 echo "0" > /sys/block/$nvme/queue/add_random
 echo "0" > /sys/block/$nvme/queue/iostats
 echo "0" > /sys/block/$nvme/queue/io_poll
