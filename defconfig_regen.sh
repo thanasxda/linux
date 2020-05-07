@@ -15,6 +15,8 @@ cp $stableconfig .config
 
 ### enter kernel configuration. optionally apply changes and press save
 ### the newly generated config will replace "thanas_defconfig" by default!
+### optionally replace "make menuconfig" with "make xconfig" for a graphical approach
+#make xconfig
 make menuconfig
 cp .config $stableconfig
 clear

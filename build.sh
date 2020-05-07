@@ -14,8 +14,9 @@ echo -e "${yellow}"
 echo "UPDATING CURRENT COMPILERS PRIOR TO INSTALLATION"
 echo "ENSURING THE KERNEL IS ALWAYS BUILT WITH THE LATEST COMPILERS"
 echo -e "${restore}"
-sudo apt -f upgrade -y clang-11 gcc-10
-sudo apt -f upgrade -y gcc clang binutils
+sudo apt -f upgrade -y clang-11 
+sudo apt -f upgrade -y gcc-10
+sudo apt -f upgrade -y gcc clang binutils make flex bison bc build-essential libncurses-dev  libssl-dev libelf-dev qt5-default
 
 ### SET UP CCACHE
 export USE_CCACHE=1
@@ -77,6 +78,8 @@ Keys.ENTER | make localmodconfig
 ### optionally use the included "stock_defconfig" for a stock kernel configuration built on this source
 ### for this to function with the "build.sh" rename "stock_defconfig" and replace "thanas_defconfig" with it
 #make menuconfig
+### or apply "make xconfig" to configure it graphically
+#make xconfig
 
 ### START COMPILATION
 Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD
