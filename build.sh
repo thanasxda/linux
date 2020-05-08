@@ -58,16 +58,16 @@ xpath=~/TOOLCHAIN/clang/bin
 export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
 export PATH=""$path":$PATH"
 #export CROSS_COMPILE=~/usr/bin/x86_64-linux-gnu-
-CLANG="CC=$path/clang-10
-        HOSTCC=clang-11  
-        AR=llvm-ar-11
-        NM=llvm-nm-11
-        OBJCOPY=$path/llvm-objcopy 
-        OBJDUMP=$path/llvm-objdump 
-        READELF=$path/llvm-readelf 
-        OBJSIZE=$path/llvm-size 
-        STRIP=$path/llvm-strip
-        LD=$path/ld.lld-11"
+CLANG="CC=clang
+        HOSTCC=clang  
+        AR=llvm-ar
+        NM=llvm-nm
+        OBJCOPY=llvm-objcopy 
+        OBJDUMP=llvm-objdump 
+        READELF=llvm-readelf 
+        OBJSIZE=llvm-size 
+        STRIP=llvm-strip
+        LD=ld.lld"
 ### optionally set linker seperately
 #LD="LD=$path/ld.gold"
 ### enable verbose output for debugging
