@@ -75,7 +75,7 @@ Keys.ENTER | make localmodconfig
 ### optionally modify defconfig prior to compilation
 ### unhash ""#make menuconfig" underneath for customization
 ### note this is temporary since the default config gets replaced prior to each compilation
-### for permanence use "./defconfig_regen.sh" and back it up because this also will be replaced but by every git pull instead
+### for permanence use "./defconfig-regen.sh" and back it up because this also will be replaced but by every git pull instead
 ### optionally use the included "stock_defconfig" for a stock kernel configuration built on this source
 ### for this to function with the "build.sh" rename "stock_defconfig" and replace "thanas_defconfig" with it
 #make menuconfig
