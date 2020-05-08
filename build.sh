@@ -87,8 +87,8 @@ Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD
 Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD modules
 
 ###### START AUTO INSTALLATION
-Keys.ENTER | sudo make $THREADS modules_install
-Keys.ENTER | sudo make $THREADS install
+sudo make $THREADS modules_install
+sudo make $THREADS install
 cd /boot
 sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
 
