@@ -15,8 +15,8 @@ echo "UPDATING CURRENT COMPILERS PRIOR TO INSTALLATION"
 echo "ENSURING THE KERNEL IS ALWAYS BUILT WITH THE LATEST COMPILERS"
 echo -e "${restore}"
 sudo apt update
-sudo apt -f upgrade -y clang-11 
-sudo apt -f upgrade -y gcc-10
+sudo apt -f upgrade -y clang-11 lld-11
+sudo apt -f upgrade -y gcc-10 clang-10 lld-10
 sudo apt -f upgrade -y gcc clang binutils make flex bison bc build-essential libncurses-dev  libssl-dev libelf-dev qt5-default
 
 ###### SET UP CCACHE
@@ -49,29 +49,38 @@ echo -e "${yellow}"
 make kernelversion
 echo -e "${restore}"
 
-###### COMPILER CONFIGURATION
+###### COMPILER CONFIGURATION - OPTIONALLY PREBUILT COMPILER CONFIG
+### set up paths in case of prebuilt compiler usage
 ### hash out "#clang" underneath to switch compiler from clang to gcc optionally
-CLANG="CC=clang HOSTCC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf OBJSIZE=llvm-size STRIP=llvm-strip"
+path=/usr/bin
+path2=/usr/lib/llvm-11/bin
+xpath=~/TOOLCHAIN/clang/bin
+export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
+export PATH=""$path":$PATH"
+#export CROSS_COMPILE=~/usr/bin/x86_64-linux-gnu-
+CLANG="CC=$path/clang-10
+        HOSTCC=clang-11  
+        AR=llvm-ar-11
+        NM=llvm-nm-11
+        OBJCOPY=$path/llvm-objcopy 
+        OBJDUMP=$path/llvm-objdump 
+        READELF=$path/llvm-readelf 
+        OBJSIZE=$path/llvm-size 
+        STRIP=$path/llvm-strip
+        LD=$path/ld.lld-11"
 ### optionally set linker seperately
-#LD="LD=ld.lld"
+#LD="LD=$path/ld.gold"
 ### enable verbose output for debugging
 #VERBOSE="V=1"
 ### ensure all cpu threads are used for compilation
 THREADS=-j$(nproc --all)
-
-###### OPTIONAL PREBUILT COMPILER CONFIG
-### set up paths in case of prebuilt compiler usage
-paths=/usr/bin
-export LD_LIBRARY_PATH="$paths/../lib:$paths/../lib64:$LD_LIBRARY_PATH"
-export PATH="$paths:$PATH"
-#export CROSS_COMPILE=
 
 ###### SETUP KERNEL CONFIG
 stableconfig=thanas_defconfig
 sudo rm -rf .config
 sudo rm -rf .config.old
 cp $stableconfig .config
-Keys.ENTER | make localmodconfig
+Keys.ENTER | make CC=clang localmodconfig
 ### optionally modify defconfig prior to compilation
 ### unhash ""#make menuconfig" underneath for customization
 ### note this is temporary since the default config gets replaced prior to each compilation

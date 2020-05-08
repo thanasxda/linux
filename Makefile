@@ -756,53 +756,51 @@ LDFLAGS		+= -plugin-opt=mcpu=native
 subdir-ccflags-y := -O3 -ffast-math -fforce-addr
 
 
-### GCC SETUP
-ifeq ($(cc-name),gcc)
-KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
-
-###ldgold
-LDFLAGS	+= -plugin LLVMgold.so
-KBUILD_CFLAGS	+= -fuse-ld=gold
-endif
-
 ### CLANG SETUP
-ifeq ($(cc-name),clang)
-###ldlld
+#ifeq ($(cc-name),clang)
+###linker
 KBUILD_CFLAGS	+= -fuse-ld=lld
+#LDFLAGS	+= -plugin LLVMgold.so
+#KBUILD_CFLAGS	+= -fuse-ld=gold
 
 KBUILD_CFLAGS	+= -Wno-uninitialized \
-	$(call cc-disable-warning,maybe-uninitialized,)
+	$(call cc-disable-warning,maybe-uninitialized,) 
+	
+KBUILD_CFLAGS	+= --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -fexceptions -fno-semantic-interposition -fno-signed-zeros \
+-fno-strict-aliasing \
+-fno-trapping-math \
+-ldl -lhmmer -lm -lncurses \
+-lpthread -lsquid -m64 -pthread -Wall \
+-Wformat-security -Wl-sort-common -Wl-z -Wp -mcpu=native \
+-g -Wp-D_REENTRANT -fno-stack-protector \
+-fwrapv -lpgcommon -lpgport -lpq -lrt -lcrypt  
 
 KBUILD_CFLAGS	+= -mllvm -polly \
-		   -mllvm -polly-omp-backend=LLVM \
-		   -mllvm -polly-scheduling=dynamic \
-		   -mllvm -polly-scheduling-chunksize=1 \
-		   -mllvm -polly-vectorizer=polly \
-		   -mllvm -polly-opt-fusion=max \
-		   -mllvm -polly-opt-maximize-bands=yes \
 		   -mllvm -polly-run-dce \
-		   -mllvm -polly-position=after-loopopt \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-opt-fusion=max \
-		   -mllvm -polly-ast-use-context \
-		   -mllvm -polly-detect-keep-going \
-		   -mllvm -polly-vectorizer=stripmine \
-		   -mllvm -polly-opt-simplify-deps=no \
-		   -mllvm -polly-rtc-max-arrays-per-group=40 \
-		   -mllvm -polly-invariant-load-hoisting \
+		   -mllvm -polly-vectorizer=polly
 		   
 KBUILD_CPPFLAGS += -Qunused-arguments
 KBUILD_CFLAGS += -Wno-format-invalid-specifier
 KBUILD_CFLAGS += -Wno-gnu
 KBUILD_CFLAGS += -mno-global-merge
-		   
 
 LLVM_AR		:= llvm-ar
 LLVM_DIS	:= llvm-dis
-KBUILD_CFLAGS	+= $(call cc-option,-ffunction-sections,)
-KBUILD_CFLAGS	+= $(call cc-option,-fdata-sections,)
-#LDFLAGS		+= -plugin-opt=-safestack-use-pointer-address
+#KBUILD_CFLAGS	+= $(call cc-option,-ffunction-sections,)
+#KBUILD_CFLAGS	+= $(call cc-option,-fdata-sections,)
+#LDFLAGS	+= -plugin-opt=-safestack-use-pointer-address
 #KBUILD_CFLAGS	+= -fvisibility=hidden -flto
+#endif
+
+### GCC SETUP
+ifeq ($(cc-name),gcc)
+KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
+
+###ldgold
+#LDFLAGS	+= -plugin LLVMgold.so
+#KBUILD_CFLAGS	+= -fuse-ld=gold
 endif
 
 #####################################################################################
