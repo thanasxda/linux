@@ -775,7 +775,8 @@ KBUILD_CFLAGS	+= --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fa
 -g -Wp-D_REENTRANT -fno-stack-protector \
 -fwrapv -lpgcommon -lpgport -lpq -lrt -lcrypt  
 
-#KBUILD_CFLAGS	+= -mllvm -polly \
+ifeq ($(cc-name),clang-10)
+KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-run-dce \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-opt-fusion=max \
@@ -792,7 +793,8 @@ KBUILD_CFLAGS	+= --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fa
 		   -mllvm -polly-vectorizer=stripmine \
 		   -mllvm -polly-opt-simplify-deps=no \
 		   -mllvm -polly-rtc-max-arrays-per-group=40 \
-		   -mllvm -polly-invariant-load-hoisting \
+		   -mllvm -polly-invariant-load-hoisting 
+endif
 		   
 KBUILD_CPPFLAGS += -Qunused-arguments
 KBUILD_CFLAGS += -Wno-format-invalid-specifier
