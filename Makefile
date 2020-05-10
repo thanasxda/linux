@@ -481,10 +481,10 @@ KBUILD_CFLAGS   := -Wall -Wundef  -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common -fshort-wchar -fno-PIE \
 		   -Wno-format-security \
 		   -std=gnu89
-		   
+
 		   ###malaka
-		   #-Werror=strict-prototypes -Werror=implicit-function-declaration -Werror=implicit-int 
-		   
+		   #-Werror=strict-prototypes -Werror=implicit-function-declaration -Werror=implicit-int
+
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
@@ -727,7 +727,7 @@ KBUILD_CFLAGS	+= $(call cc-disable-warning, format-overflow)
 KBUILD_CFLAGS	+= $(call cc-disable-warning, address-of-packed-member)
 
 ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE
-KBUILD_CFLAGS += -O3 
+KBUILD_CFLAGS += -O3
 else ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
 KBUILD_CFLAGS += -O3
 else ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
@@ -742,7 +742,7 @@ KBUILD_CFLAGS += -O3 -ffast-math -fforce-addr -mtune=native -march=native \
 -fomit-frame-pointer -pipe -Wno-error \
 -funroll-loops -ftree-vectorize -Wno-frame-address -Wno-maybe-uninitialized
 
-KBUILD_CFLAGS	+= -fopenmp 
+KBUILD_CFLAGS	+= -fopenmp
 
 subdir-ccflags-y += $(call cc-disable-warning, frame-address)
 
@@ -764,8 +764,8 @@ KBUILD_CFLAGS	+= -fuse-ld=lld
 #KBUILD_CFLAGS	+= -fuse-ld=gold
 
 KBUILD_CFLAGS	+= -Wno-uninitialized \
-	$(call cc-disable-warning,maybe-uninitialized,) 
-	
+	$(call cc-disable-warning,maybe-uninitialized,)
+
 KBUILD_CFLAGS	+= --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -fexceptions -fno-semantic-interposition -fno-signed-zeros \
 -fno-strict-aliasing \
 -fno-trapping-math \
@@ -773,7 +773,7 @@ KBUILD_CFLAGS	+= --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fa
 -lpthread -lsquid -m64 -pthread -Wall \
 -Wformat-security -Wl-sort-common -Wl-z -Wp -mcpu=native \
 -g -Wp-D_REENTRANT -fno-stack-protector \
--fwrapv -lpgcommon -lpgport -lpq -lrt -lcrypt  
+-fwrapv -lpgcommon -lpgport -lpq -lrt -lcrypt
 
 ifeq ($(cc-name),clang-10)
 KBUILD_CFLAGS	+= -mllvm -polly \
@@ -781,7 +781,7 @@ KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-opt-fusion=max \
 		   -mllvm -polly-vectorizer=polly \
-		  
+
 		  #-mllvm -polly-omp-backend=LLVM \
 		   -mllvm -polly-scheduling=dynamic \
 		   -mllvm -polly-scheduling-chunksize=1 \
@@ -793,9 +793,9 @@ KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-vectorizer=stripmine \
 		   -mllvm -polly-opt-simplify-deps=no \
 		   -mllvm -polly-rtc-max-arrays-per-group=40 \
-		   -mllvm -polly-invariant-load-hoisting 
+		   -mllvm -polly-invariant-load-hoisting
 endif
-		   
+
 KBUILD_CPPFLAGS += -Qunused-arguments
 KBUILD_CFLAGS += -Wno-format-invalid-specifier
 KBUILD_CFLAGS += -Wno-gnu
@@ -1003,8 +1003,9 @@ endif
 # Make sure -fstack-check isn't enabled (like gentoo apparently did)
 KBUILD_CFLAGS  += $(call cc-option,-fno-stack-check,)
 
+###malaka
 # conserve stack if available
-KBUILD_CFLAGS   += $(call cc-option,-fconserve-stack)
+#KBUILD_CFLAGS   += $(call cc-option,-fconserve-stack)
 
 ###malaka
 # Prohibit date/time macros, which would make the build non-deterministic
