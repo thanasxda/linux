@@ -7,7 +7,7 @@ yellow="\033[1;93m"
 magenta="\033[05;1;95m"
 restore="\033[0m"
 
-###### DETECT CURRENT PATCHLEVEL VERSIONING ONLY - for safety 
+###### DETECT CURRENT PATCHLEVEL VERSIONING ONLY - for safety
 makefile="$(pwd)/Makefile"
 
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
@@ -19,11 +19,11 @@ PATCHLEVEL=$(echo "$PATCHLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 SUBLEVEL=$(echo "$SUBLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 #EXTRAVERSION="$(echo -e "${EXTRAVERSION}" | sed -e 's/^[[:space:]]*//')"
 #KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
-RC_KERNEL="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"-rc*
+#RC_KERNEL="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"-rc*
 
 ### for deletion of a specific version or older than current version
-### input kernelname into one of the "manual='name_here'" underneath
-manual='name_here'
+### input kernelname into one of the "manual='name_here*'" underneath
+manual=5.7.0-rc4*
 
 echo -e "${magenta}"
 echo REMOVING ALL INSTALLED RELEASE CANDIDATE WITH VESIONING $RC_KERNEL KERNELS FOUND ON THE SYSTEM VERSIONS!
