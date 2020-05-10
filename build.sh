@@ -52,6 +52,8 @@ echo -e "${restore}"
 ###### COMPILER CONFIGURATION - OPTIONALLY PREBUILT COMPILER CONFIG
 ### set up paths in case of prebuilt compiler usage
 ### hash out "#clang" underneath to switch compiler from clang to gcc optionally
+### if "CC=clang-10" is being used, -mllvm -polly optimizations will be enabled
+### not included in clang-11 for now, due to compiler errors
 path=/usr/bin
 path2=/usr/lib/llvm-11/bin
 xpath=~/TOOLCHAIN/clang/bin
@@ -96,10 +98,10 @@ Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD
 Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD modules
 
 ###### START AUTO INSTALLATION
-sudo make $THREADS modules_install
-sudo make $THREADS install
+Keys.ENTER | sudo make $THREADS modules_install
+Keys.ENTER | sudo make $THREADS install
 cd /boot
-sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
+Keys.ENTER | sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
 
 ###### SETTING UP SYSTEM CONFIGURATION
 ### set up init.sh for kernel configuration
@@ -115,7 +117,7 @@ sudo sed -i '1s#.*#@reboot root /init.sh#' /etc/crontab
 ### switch off mitigations improving linux performance
 sudo sed -i '10s/.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash noibrs noibpb nopti nospectre_v2 nospectre_v1 l1tf=off nospec_store_bypass_disable no_stf_barrier mds=off spectre_v2_user=off spec_store_bypass_disable=off mitigations=off scsi_mod.use_blk_mq=1"/' /etc/default/grub
 ### apply grub settings
-sudo update-grub
+sudo update-grub2
 ### grub auto detection
 GRUB_PATH=$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
 sudo grub-install $GRUB_PATH

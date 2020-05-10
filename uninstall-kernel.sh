@@ -55,7 +55,7 @@ sudo rm -rf /init.sh
 
 ###### SYSTEM OPTIMIZATION REVERSAL TO STOCK
 sudo sed -i '10s/.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
-sudo update-grub
+sudo update-grub2
 GRUB_PATH=$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
 sudo grub-install $GRUB_PATH
 
