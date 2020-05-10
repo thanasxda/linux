@@ -61,13 +61,13 @@ export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
 export PATH=""$path":$PATH"
 #export CROSS_COMPILE=~/usr/bin/x86_64-linux-gnu-
 CLANG="CC=clang
-        HOSTCC=clang  
+        HOSTCC=clang
         AR=llvm-ar
         NM=llvm-nm
-        OBJCOPY=llvm-objcopy 
-        OBJDUMP=llvm-objdump 
-        READELF=llvm-readelf 
-        OBJSIZE=llvm-size 
+        OBJCOPY=llvm-objcopy
+        OBJDUMP=llvm-objdump
+        READELF=llvm-readelf
+        OBJSIZE=llvm-size
         STRIP=llvm-strip
         LD=ld.lld"
 ### optionally set linker seperately
