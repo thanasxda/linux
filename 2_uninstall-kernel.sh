@@ -19,16 +19,18 @@ PATCHLEVEL=$(echo "$PATCHLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 SUBLEVEL=$(echo "$SUBLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 #EXTRAVERSION="$(echo -e "${EXTRAVERSION}" | sed -e 's/^[[:space:]]*//')"
 #KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
-#RC_KERNEL="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"-rc*
+RC_KERNEL="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"-rc*
 
 ### for deletion of a specific version or older than current version
 ### input kernelname into one of the "manual='name_here*'" underneath
+### note that the usage of * will remove any kernel starting with that name
 manual=5.7.0-rc4*
 
 echo -e "${magenta}"
 echo REMOVING ALL INSTALLED RELEASE CANDIDATE WITH VESIONING $RC_KERNEL KERNELS FOUND ON THE SYSTEM VERSIONS!
 echo -e "${yellow}"
 echo for safety avoiding removing any stock kernels open the "/uninstall-kernel.sh" script and insert your previous patchlevel manually if needed under "manual='name_here'"
+echo TO AVOID ISSUES UNINSTALL THE KENELS WHILE RUNNING ON A KERNEL THAT WILL NOT BE REMOVED BY THIS SCRIPT!!!
 echo -e "${restore}"
 
 ###### KERNEL REMOVAL

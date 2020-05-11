@@ -1,6 +1,6 @@
 #!/bin/bash
 ### THANAS x86-64 KERNEL - MODDED TORVALDS DEVELOPMENT FORK
-### built with llvm/clang by default
+### built with llvm/clang by default - stock version
 ###########################################################
 
 ###### SET BASH COLORS AND CONFIGURE COMPILATION TIME DISPLAY
@@ -44,7 +44,7 @@ KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"-thanas+
 ###### DISPLAY KERNEL VERSION
 clear
 echo -e "${magenta}"
-echo - THANAS X86-64 KERNEL -
+echo - THANAS X86-64 KERNEL - stock version
 echo -e "${yellow}"
 make kernelversion
 echo -e "${restore}"
@@ -61,28 +61,28 @@ xpath=~/TOOLCHAIN/clang/bin
 export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
 export PATH=""$path":$PATH"
 
-CLANG="CC=clang-11
-        HOSTCC=clang-11
-        AR=llvm-ar-11
-        NM=llvm-nm-11
+CLANG="CC=clang
+        HOSTCC=clang
+        AR=llvm-ar
+        NM=llvm-nm
         OBJCOPY=llvm-objcopy
         OBJDUMP=llvm-objdump
         READELF=llvm-readelf
         OBJSIZE=llvm-size
         STRIP=llvm-strip"
 ### optionally set linker seperately
-LD="LD=ld.lld-11"
+LD="LD=ld.lld"
 ### enable verbose output for debugging
 #VERBOSE="V=1"
 ### ensure all cpu threads are used for compilation
 THREADS=-j$(nproc --all)
 
 ###### SETUP KERNEL CONFIG
-stableconfig=thanas_defconfig
+stableconfig=stock_defconfig
 sudo rm -rf .config
 sudo rm -rf .config.old
 cp $stableconfig .config
-Keys.ENTER | make CC=clang-11 localmodconfig
+Keys.ENTER | make "CC=clang" localmodconfig
 ### optionally modify defconfig prior to compilation
 ### unhash ""#make menuconfig" underneath for customization
 ### note this is temporary since the default config gets replaced prior to each compilation

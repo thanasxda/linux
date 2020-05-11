@@ -27,7 +27,7 @@ cp $stableconfig .config
 ### optionally replace "make menuconfig" with "make xconfig" for a graphical approach
 ### compiler used CC=clang - as to show up correctly
 #make CC=clang xconfig
-make CC=clang menuconfig
+make "CC=clang" menuconfig
 cp .config $stableconfig
 
 ###### COMPLETION
