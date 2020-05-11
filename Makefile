@@ -403,31 +403,32 @@ ifneq ($(LLVM),)
 HOSTCC       = clang$(LLVM_VERSION)
 HOSTCXX      = clang++$(LLVM_VERSION)
 else
-HOSTCC	= gcc
-HOSTCXX	= g++
+HOSTCC	= gcc$(GCC_VERSION)
+HOSTCXX	= g++$(GCC_VERSION)
 endif
 ###malaka
-KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -ffast-math -pipe -fPIE \
-		-fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS) \
-		$(HOSTCFLAGS)
+KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS) $(HOSTCFLAGS) -O3 -ffast-math -pipe -fPIE -march=native -mtune=native \
+--param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -Wformat-security -fno-semantic-interposition \
+-fno-signed-zeros -fno-strict-aliasing -fno-trapping-math -m64 -pthread -Wformat-security -fno-stack-protector -fwrapv -funroll-loops -ftree-vectorize -fforce-addr
+
 KBUILD_HOSTCXXFLAGS := -Wall -O3 -ffast-math $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
-KBUILD_HOSTLDFLAGS  := -O3 $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
+KBUILD_HOSTLDFLAGS  := -O3 -fuse-ld=lld  $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
 KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-CC		= clang
-LD		= ld.lld
-AR		= llvm-ar
-NM		= llvm-nm
+CC		= clang$(LLVM_VERSION)
+LD		= ld.lld$(LLVM_VERSION)
+AR		= llvm-ar$(LLVM_VERSION)
+NM		= llvm-nm$(LLVM_VERSION)
 OBJCOPY		= llvm-objcopy
 OBJDUMP		= llvm-objdump
 READELF		= llvm-readelf
 OBJSIZE		= llvm-size
 STRIP		= llvm-strip
 else
-CC		= $(CROSS_COMPILE)gcc
+CC		= $(CROSS_COMPILE)gcc$(GCC_VERSION)
 LD		= $(CROSS_COMPILE)ld
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
@@ -734,47 +735,46 @@ else ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS += -O3
 endif
 
+ifdef CONFIG_CC_DISABLE_WARN_MAYBE_UNINITIALIZED
+KBUILD_CFLAGS   += -Wno-maybe-uninitialized
+endif
+
 #####################################################################################
 #####################################################################################
 ###THANAS
 
-KBUILD_CFLAGS += -O3 -ffast-math -fforce-addr -mtune=native -march=native \
--fomit-frame-pointer -pipe -Wno-error \
--funroll-loops -ftree-vectorize -Wno-frame-address -Wno-maybe-uninitialized
+### flags that apply to gcc as well as llvm
+KBUILD_CFLAGS += -O3 -ffast-math -fforce-addr -mtune=native -march=native -fomit-frame-pointer -pipe -Wno-error -funroll-loops -ftree-vectorize -Wno-frame-address -Wno-maybe-uninitialized -fopenmp \
+--param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -fexceptions -fno-semantic-interposition -fno-signed-zeros \
+-fno-strict-aliasing -fno-trapping-math -ldl -lhmmer -lm -lncurses -lpthread -lsquid -m64 -pthread -Wall -Wformat-security -Wl-sort-common -Wl-z -Wp -mcpu=native -g -Wp-D_REENTRANT -fno-stack-protector \
+-fwrapv -lpgcommon -lpgport -lpq -lrt -lcrypt
 
-KBUILD_CFLAGS	+= -fopenmp
+LDFLAGS		+= -O3 -plugin-opt=-function-sections -plugin-opt=-data-sections -plugin-opt=new-pass-manager --plugin-opt=O3 -plugin-opt=mcpu=native
 
-subdir-ccflags-y += $(call cc-disable-warning, frame-address)
+subdir-ccflags-y := -O3 -ffast-math -fforce-addr --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -fexceptions -fno-semantic-interposition \
+-fno-signed-zeros -fno-strict-aliasing -fno-trapping-math -ldl -lhmmer -lm -lncurses -lpthread -lsquid -m64 -pthread -Wall -Wformat-security -Wl-sort-common -Wl-z -Wp -mcpu=native -g -Wp-D_REENTRANT -fno-stack-protector \
+-fwrapv -lpgcommon -lpgport -lpq -lrt -lcrypt -mtune=native -march=native -fomit-frame-pointer -pipe -Wno-error -funroll-loops -ftree-vectorize -Wno-frame-address -Wno-maybe-uninitialized -fopenmp -Wno-uninitialized \
+$(call cc-disable-warning,maybe-uninitialized,) $(call cc-disable-warning, frame-address)
 
-LDFLAGS		+= -O3
-LDFLAGS		+= -plugin-opt=-function-sections
-LDFLAGS		+= -plugin-opt=-data-sections
-LDFLAGS		+= -plugin-opt=new-pass-manager
-LDFLAGS		+= --plugin-opt=O3
-LDFLAGS		+= -plugin-opt=mcpu=native
-
-subdir-ccflags-y := -O3 -ffast-math -fforce-addr
-
-
-### CLANG SETUP
+### CLANG SETUP - flags that apply to clang only
 #ifeq ($(cc-name),clang)
 ###linker
 KBUILD_CFLAGS	+= -fuse-ld=lld
 #LDFLAGS	+= -plugin LLVMgold.so
 #KBUILD_CFLAGS	+= -fuse-ld=gold
 
-KBUILD_CFLAGS	+= -Wno-uninitialized \
-	$(call cc-disable-warning,maybe-uninitialized,)
+### switch off gcc when clang is being used
+KBUILD_CPPFLAGS += -Qunused-arguments
+KBUILD_CFLAGS += -Wno-format-invalid-specifier -Wno-gnu -mno-global-merge
 
-KBUILD_CFLAGS	+= --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -fexceptions -fno-semantic-interposition -fno-signed-zeros \
--fno-strict-aliasing \
--fno-trapping-math \
--ldl -lhmmer -lm -lncurses \
--lpthread -lsquid -m64 -pthread -Wall \
--Wformat-security -Wl-sort-common -Wl-z -Wp -mcpu=native \
--g -Wp-D_REENTRANT -fno-stack-protector \
--fwrapv -lpgcommon -lpgport -lpq -lrt -lcrypt
+LLVM_AR		:= llvm-ar
+LLVM_DIS	:= llvm-dis
+#KBUILD_CFLAGS	+= $(call cc-option,-ffunction-sections,)
+#KBUILD_CFLAGS	+= $(call cc-option,-fdata-sections,)
+#LDFLAGS	+= -plugin-opt=-safestack-use-pointer-address
+#KBUILD_CFLAGS	+= -fvisibility=hidden -flto
 
+### flags that apply to clang-10 strictly
 ifeq ($(cc-name),clang-10)
 KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-run-dce \
@@ -796,34 +796,18 @@ KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-invariant-load-hoisting
 endif
 
-KBUILD_CPPFLAGS += -Qunused-arguments
-KBUILD_CFLAGS += -Wno-format-invalid-specifier
-KBUILD_CFLAGS += -Wno-gnu
-KBUILD_CFLAGS += -mno-global-merge
-
-LLVM_AR		:= llvm-ar
-LLVM_DIS	:= llvm-dis
-#KBUILD_CFLAGS	+= $(call cc-option,-ffunction-sections,)
-#KBUILD_CFLAGS	+= $(call cc-option,-fdata-sections,)
-#LDFLAGS	+= -plugin-opt=-safestack-use-pointer-address
-#KBUILD_CFLAGS	+= -fvisibility=hidden -flto
-#endif
-
-### GCC SETUP
-ifeq ($(cc-name),gcc)
+### GCC SETUP - flags that apply to gcc only
+ifeq ($(cc-name),gcc$(GCC_VERSION))
 KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
 
 ###ldgold
-#LDFLAGS	+= -plugin LLVMgold.so
-#KBUILD_CFLAGS	+= -fuse-ld=gold
+LDFLAGS	+= -plugin LLVMgold.so
+KBUILD_CFLAGS	+= -fuse-ld=gold
+#else
 endif
 
 #####################################################################################
 #####################################################################################
-
-ifdef CONFIG_CC_DISABLE_WARN_MAYBE_UNINITIALIZED
-KBUILD_CFLAGS   += -Wno-maybe-uninitialized
-endif
 
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
