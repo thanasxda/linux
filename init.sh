@@ -3,6 +3,10 @@
 ### THIS FILE WILL BE LOCATED IN ROOT FILESYSTEM "/init.sh"
 ######################################################################
 
+###### CONFIGURE SWAPPINESS
+
+sudo sysctl vm.swappiness=90
+
 ###### CONFIGURE SCHEDULER
 
 ### configure paths for scheduler
