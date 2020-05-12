@@ -141,6 +141,17 @@ echo "0" > /proc/sys/net/ipv6/calipso_cache_bucket_size
 echo "0" > /proc/sys/net/ipv6/calipso_cache_enable
 echo "48" > /proc/sys/net/ipv6/ip6frag_time
 
+echo "1" > /proc/sys/net/ipv4/net.ipv4.tcp_rfc1337
+echo "1" > /proc/sys/net/ipv4/net.ipv4.tcp_window_scaling
+echo "1" > /proc/sys/net/ipv4/net.ipv4.tcp_workaround_signed_windows
+echo "1" > /proc/sys/net/ipv4/net.ipv4.tcp_sack
+echo "1" > /proc/sys/net/ipv4/net.ipv4.tcp_fack
+echo "1" > /proc/sys/net/ipv4/net.ipv4.tcp_low_latency
+echo "0" > /proc/sys/net/ipv4/net.ipv4.ip_no_pmtu_disc
+echo "1" > /proc/sys/net/ipv4/net.ipv4.tcp_mtu_probing
+echo "2" > /proc/sys/net/ipv4/net.ipv4.tcp_frto
+echo "2" > /proc/sys/net/ipv4/net.ipv4.tcp_frto_response
+
 for i in $(find /sys/class/net -type l); do
   echo "128" > $i/tx_queue_len;
 done;
