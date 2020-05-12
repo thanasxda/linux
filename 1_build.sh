@@ -54,13 +54,26 @@ echo -e "${restore}"
 ### hash out "#clang" underneath to switch compiler from clang to gcc optionally
 ### if "CC=clang-10" is being used, -mllvm -polly optimizations will be enabled
 ### not included in clang-11 for now, due to compiler errors
-#export CROSS_COMPILE=/usr/bin/x86_64-linux-gnu-
-path=/usr/bin
-path2=/usr/lib/llvm-11/bin
-xpath=~/TOOLCHAIN/clang/bin
-export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
-export PATH=""$path":$PATH"
+##export CROSS_COMPILE=/usr/bin/x86_64-linux-gnu-
+#path=/usr/bin
+#path2=/usr/lib/llvm-11/bin
 
+### set to prebuilt compiler
+#xpath=~/TOOLCHAIN/clang/bin
+#export LD_LIBRARY_PATH=""$xpath"/../lib:"$xpath"/../lib64:$LD_LIBRARY_PATH"
+#export PATH=""$xpath":$PATH"
+#CLANG="CC=$xpath/clang
+#        HOSTCC=$xpath/clang
+#        AR=$xpath/llvm-ar
+#        NM=$xpath/llvm-nm
+#        OBJCOPY=$xpath/llvm-objcopy
+#        OBJDUMP=$xpath/llvm-objdump
+#        READELF=$xpath/llvm-readelf
+#        OBJSIZE=$xpath/llvm-size
+#        STRIP=$xpath/llvm-strip
+#        LD=$xpath/ld.lld"
+
+### set to system compiler
 CLANG="CC=clang-11
         HOSTCC=clang-11
         AR=llvm-ar-11
@@ -84,7 +97,7 @@ sudo rm -rf .config.old
 cp $stableconfig .config
 Keys.ENTER | make CC=clang-11 localmodconfig
 ### optionally modify defconfig prior to compilation
-### unhash ""#make menuconfig" underneath for customization
+### unhash "#make menuconfig" underneath for customization
 ### note this is temporary since the default config gets replaced prior to each compilation
 ### for permanence use "./defconfig-regen.sh" and back it up because this also will be replaced but by every git pull instead
 ### optionally use the included "stock_defconfig" for a stock kernel configuration built on this source
