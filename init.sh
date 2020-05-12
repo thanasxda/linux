@@ -114,7 +114,7 @@ echo "96" > /proc/sys/kernel/random/urandom_min_reseed_secs
 echo "1024" > /proc/sys/kernel/random/write_wakeup_threshold
 ### hibernation
 echo "deep" > /sys/power/mem_sleep
-###extras
+### extras
 echo "Y" > /sys/module/cryptomgr/parameters/notests
 echo "1" > /sys/module/hid/parameters/ignore_special_drivers
 echo "N" > /sys/module/drm_kms_helper/parameters/poll
