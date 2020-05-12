@@ -180,6 +180,6 @@ fi;
 ###### SCHEDULE FSTRIM ONCE WEEKLY
 ################################
 ### rerunning this same command will not trigger reset in timer
-sudo systemctl status fstrim.timer
+sudo systemctl start fstrim.timer
 
 ###### END
