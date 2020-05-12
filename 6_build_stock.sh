@@ -81,8 +81,7 @@ THREADS=-j$(nproc --all)
 stableconfig=stock_defconfig
 sudo rm -rf .config
 sudo rm -rf .config.old
-cp $stableconfig .config
-Keys.ENTER | make "CC=clang" localmodconfig
+#Keys.ENTER | make "CC=clang" localmodconfig
 ### optionally modify defconfig prior to compilation
 ### unhash ""#make menuconfig" underneath for customization
 ### note this is temporary since the default config gets replaced prior to each compilation
