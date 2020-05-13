@@ -744,10 +744,12 @@ endif
 ###THANAS
 
 ### flags that apply to gcc as well as llvm
-KBUILD_CFLAGS += -O3 -ffast-math -fforce-addr -mtune=native -march=native -fomit-frame-pointer -pipe -Wno-error -funroll-loops -ftree-vectorize -Wno-frame-address -Wno-maybe-uninitialized -fopenmp \
+KBUILD_CFLAGS += -O3 -ffast-math -fforce-addr -mtune=native -fomit-frame-pointer -pipe -Wno-error -funroll-loops -ftree-vectorize -Wno-frame-address -Wno-maybe-uninitialized -fopenmp \
 --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -fexceptions -fno-semantic-interposition -fno-signed-zeros \
--fno-strict-aliasing -fno-trapping-math -ldl -lhmmer -lm -lncurses -lpthread -lsquid -m64 -pthread -Wall -Wformat-security -Wl-sort-common -Wl-z -Wp -mcpu=native -g -Wp-D_REENTRANT -fno-stack-protector \
+-fno-strict-aliasing -fno-trapping-math -ldl -lhmmer -lm -lncurses -lpthread -lsquid -m64 -pthread -Wall -Wformat-security -mcpu=native -g -fno-stack-protector \
 -fwrapv -lpgcommon -lpgport -lpq -lrt -lcrypt
+
+KBUILD_CFLAGS += -march=native -Wl-sort-common -Wl-z -Wp -Wp-D_REENTRANT
 
 LDFLAGS		+= -O3 -plugin-opt=-function-sections -plugin-opt=-data-sections -plugin-opt=new-pass-manager --plugin-opt=O3 -plugin-opt=mcpu=native
 
@@ -762,10 +764,6 @@ $(call cc-disable-warning,maybe-uninitialized,) $(call cc-disable-warning, frame
 KBUILD_CFLAGS	+= -fuse-ld=lld
 #LDFLAGS	+= -plugin LLVMgold.so
 #KBUILD_CFLAGS	+= -fuse-ld=gold
-
-### switch off gcc when clang is being used
-KBUILD_CPPFLAGS += -Qunused-arguments
-KBUILD_CFLAGS += -Wno-format-invalid-specifier -Wno-gnu -mno-global-merge
 
 LLVM_AR		:= llvm-ar
 LLVM_DIS	:= llvm-dis
