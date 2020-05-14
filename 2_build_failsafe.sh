@@ -1,6 +1,8 @@
 #!/bin/bash
 ### THANAS x86-64 KERNEL - MODDED TORVALDS DEVELOPMENT FORK
-### built with llvm/clang by default - stock version
+### built with llvm/clang by default.
+### failsafe buildscript - for when facing compiler issues
+### make sure to ./install-toolchain.sh prior
 ###########################################################
 
 ###### SET BASH COLORS AND CONFIGURE COMPILATION TIME DISPLAY
@@ -15,9 +17,11 @@ echo "UPDATING CURRENT COMPILERS PRIOR TO INSTALLATION"
 echo "ENSURING THE KERNEL IS ALWAYS BUILT WITH THE LATEST COMPILERS"
 echo -e "${restore}"
 sudo apt update
-sudo apt -f upgrade -y clang-11 lld-11
-sudo apt -f upgrade -y gcc-10 clang-10 lld-10
-sudo apt -f upgrade -y gcc clang binutils make flex bison bc build-essential libncurses-dev  libssl-dev libelf-dev qt5-default
+sudo apt -f install -y aptitude
+sudo aptitude -f install -y clang-11 lld-11
+sudo aptitude -f install -y clang-10 lld-10
+sudo aptitude -f install -y gcc-10
+sudo aptitude -f install -y gcc clang binutils make flex bison bc build-essential libncurses-dev libssl-dev libelf-dev qt5-default
 
 ###### SET UP CCACHE
 export USE_CCACHE=1
@@ -44,7 +48,7 @@ KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"-thanas+
 ###### DISPLAY KERNEL VERSION
 clear
 echo -e "${magenta}"
-echo - THANAS X86-64 KERNEL - stock version
+echo - THANAS X86-64 KERNEL -
 echo -e "${yellow}"
 make kernelversion
 echo -e "${restore}"
@@ -54,36 +58,49 @@ echo -e "${restore}"
 ### hash out "#clang" underneath to switch compiler from clang to gcc optionally
 ### if "CC=clang-10" is being used, -mllvm -polly optimizations will be enabled
 ### not included in clang-11 for now, due to compiler errors
-#export CROSS_COMPILE=/usr/bin/x86_64-linux-gnu-
+##export CROSS_COMPILE=/usr/bin/x86_64-linux-gnu-
 path=/usr/bin
 path2=/usr/lib/llvm-11/bin
-xpath=~/TOOLCHAIN/clang/bin
-export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
-export PATH=""$path":$PATH"
 
-CLANG="CC=clang
-        HOSTCC=clang
-        AR=llvm-ar
-        NM=llvm-nm
-        OBJCOPY=llvm-objcopy
-        OBJDUMP=llvm-objdump
-        READELF=llvm-readelf
-        OBJSIZE=llvm-size
-        STRIP=llvm-strip"
+### set to prebuilt compiler
+xpath=~/TOOLCHAIN/clang/bin
+export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
+export PATH=""$path2":$PATH"
+CLANG="CC=$path/clang
+        HOSTCC=$path/clang"
+        #AR=$path2/llvm-ar-11
+        #NM=$path2/llvm-nm
+        #OBJCOPY=$path2/llvm-objcopy
+        #OBJDUMP=$path2/llvm-objdump
+        #READELF=$path2/llvm-readelf
+        #OBJSIZE=$path2/llvm-size
+        #STRIP=$path2/llvm-strip
+        #LD=$path2/ld.lld"
+
+### set to system compiler
+#CLANG="CC=clang
+#        HOSTCC=clang
+#        NM=llvm-nm
+#        OBJCOPY=llvm-objcopy
+#        OBJDUMP=llvm-objdump
+#        READELF=llvm-readelf
+#        OBJSIZE=llvm-size
+#        STRIP=llvm-strip"
 ### optionally set linker seperately
-LD="LD=ld.lld"
+#LD="LD=ld.lld"
 ### enable verbose output for debugging
 #VERBOSE="V=1"
 ### ensure all cpu threads are used for compilation
 THREADS=-j$(nproc --all)
 
 ###### SETUP KERNEL CONFIG
-stableconfig=stock_defconfig
+stableconfig=thanas_defconfig
 sudo rm -rf .config
 sudo rm -rf .config.old
-#Keys.ENTER | make "CC=clang" localmodconfig
+cp $stableconfig .config
+Keys.ENTER | make CC=clang-11 localmodconfig
 ### optionally modify defconfig prior to compilation
-### unhash ""#make menuconfig" underneath for customization
+### unhash "#make menuconfig" underneath for customization
 ### note this is temporary since the default config gets replaced prior to each compilation
 ### for permanence use "./defconfig-regen.sh" and back it up because this also will be replaced but by every git pull instead
 ### optionally use the included "stock_defconfig" for a stock kernel configuration built on this source
@@ -115,9 +132,14 @@ echo -e "${restore}"
 cd $source_dir
 chmod +x init.sh
 sudo \cp init.sh /init.sh
-sudo sed -i '1s#.*#@reboot root /init.sh#' /etc/crontab
+if grep -q "@reboot root /init.sh" /etc/crontab
+then
+echo "Flag exists"
+else
+sudo sed -i "\$a@reboot root /init.sh" /etc/crontab
+fi
 ### switch off mitigations improving linux performance
-sudo sed -i '10s/.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash noibrs noibpb nopti nospectre_v2 nospectre_v1 l1tf=off nospec_store_bypass_disable no_stf_barrier mds=off spectre_v2_user=off spec_store_bypass_disable=off mitigations=off scsi_mod.use_blk_mq=1"/' /etc/default/grub
+sudo sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/c\GRUB_CMDLINE_LINUX_DEFAULT="quiet splash noibrs noibpb nopti nospectre_v2 nospectre_v1 l1tf=off nospec_store_bypass_disable no_stf_barrier mds=off spectre_v2_user=off spec_store_bypass_disable=off mitigations=off scsi_mod.use_blk_mq=1"' /etc/default/grub
 ### apply grub settings
 sudo update-grub2
 ### grub auto detection
