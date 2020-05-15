@@ -69,4 +69,8 @@ echo ...
 echo ALL $RC_KERNEL KERNELS UNINSTALLED AND ALL OPTIMIZATIONS REVERTED
 echo -e "${restore}"
 
+read -p "Press Enter to reboot or Ctrl+C to cancel"
+
+sudo reboot
+
 ###### END

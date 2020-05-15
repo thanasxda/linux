@@ -10,7 +10,10 @@
 ######################################################################
 
 #### add delay prior to application
-sleep 30
+sleep 10
+
+#### extras
+echo fq_codel > /proc/sys/net/core/default_qdisc
 
 ###### CONFIGURE SCHEDULER
 ################################
@@ -28,8 +31,8 @@ echo "0" > /sys/block/$sd/queue/add_random
 echo "0" > /sys/block/$sd/queue/iostats
 echo "0" > /sys/block/$sd/queue/io_poll
 echo "0" > /sys/block/$sd/queue/nomerges
-echo "2048" > /sys/block/$sd/queue/nr_requests
-echo "2048" > /sys/block/$sd/queue/read_ahead_kb
+echo "4096" > /sys/block/$sd/queue/nr_requests
+echo "4096" > /sys/block/$sd/queue/read_ahead_kb
 echo "0" > /sys/block/$sd/queue/rotational
 echo "1" > /sys/block/$sd/queue/rq_affinity
 echo "write through" > /sys/block/$sd/queue/write_cache
@@ -55,8 +58,8 @@ echo "0" > /sys/block/$nvme/queue/add_random
 echo "0" > /sys/block/$nvme/queue/iostats
 echo "0" > /sys/block/$nvme/queue/io_poll
 echo "0" > /sys/block/$nvme/queue/nomerges
-echo "2048" > /sys/block/$nvme/queue/nr_requests
-echo "2048" > /sys/block/$nvme/queue/read_ahead_kb
+echo "4096" > /sys/block/$nvme/queue/nr_requests
+echo "4096" > /sys/block/$nvme/queue/read_ahead_kb
 echo "0" > /sys/block/$nvme/queue/rotational
 echo "1" > /sys/block/$nvme/queue/rq_affinity
 echo "write through" > /sys/block/$nvme/queue/write_cache

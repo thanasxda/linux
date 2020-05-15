@@ -87,7 +87,7 @@ CLANG="CC=$path/clang
 #        OBJSIZE=llvm-size
 #        STRIP=llvm-strip"
 ### optionally set linker seperately
-#LD="LD=ld.lld"
+LD="LD=$path2/ld.lld"
 ### enable verbose output for debugging
 #VERBOSE="V=1"
 ### ensure all cpu threads are used for compilation
