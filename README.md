@@ -1,7 +1,7 @@
 thanas-x86-64-kernel
 ====================
 modded fork of torvalds dev git.
-automated ./build.sh & installation process. contains uninstall script.
+auto install - use "1_build.sh" if it fails to build use 2_build_failsafe.sh
 extended instructions can be found in every script.
 
 also preconfigured in:
