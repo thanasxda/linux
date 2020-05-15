@@ -57,23 +57,23 @@ echo -e "${restore}"
 ### if "CC=clang-10" is being used, -mllvm -polly optimizations will be enabled
 ### not included in clang-11 for now, due to compiler errors
 #export CROSS_COMPILE=/usr/bin/x86_64-linux-gnu-
-path=/usr/bin
-path2=/usr/lib/llvm-11/bin
-xpath=~/TOOLCHAIN/clang/bin
-export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
-export PATH=""$path":$PATH"
+#path=/usr/bin
+#path2=/usr/lib/llvm-11/bin
+#xpath=~/TOOLCHAIN/clang/bin
+#export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
+#export PATH=""$path":$PATH"
 
 CLANG="CC=clang
-        HOSTCC=clang
-        AR=llvm-ar
-        NM=llvm-nm
-        OBJCOPY=llvm-objcopy
-        OBJDUMP=llvm-objdump
-        READELF=llvm-readelf
-        OBJSIZE=llvm-size
-        STRIP=llvm-strip"
+        HOSTCC=clang"
+        #AR=llvm-ar
+        #NM=llvm-nm
+        #OBJCOPY=llvm-objcopy
+        #OBJDUMP=llvm-objdump
+        #READELF=llvm-readelf
+        #OBJSIZE=llvm-size
+        #STRIP=llvm-strip"
 ### optionally set linker seperately
-LD="LD=ld.lld"
+#LD="LD=ld.lld"
 ### enable verbose output for debugging
 #VERBOSE="V=1"
 ### ensure all cpu threads are used for compilation

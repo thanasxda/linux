@@ -68,7 +68,7 @@ export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
 export PATH=""$path2":$PATH"
 CLANG="CC=$path/clang
         HOSTCC=$path/clang"
-        #AR=$path2/llvm-ar-11
+        #AR=$path2/llvm-ar
         #NM=$path2/llvm-nm
         #OBJCOPY=$path2/llvm-objcopy
         #OBJDUMP=$path2/llvm-objdump
