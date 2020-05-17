@@ -11,6 +11,13 @@ yellow="\033[1;93m"
 magenta="\033[05;1;95m"
 restore="\033[0m"
 
+###### SET VARIABLES
+### dirs
+source="$(pwd)"
+makefile=$source/Makefile
+### config
+defconfig=thanas_defconfig
+
 ###### UPGRADE COMPILERS PRIOR TO COMPILATION
 echo -e "${yellow}"
 echo "UPDATING CURRENT COMPILERS PRIOR TO INSTALLATION"
@@ -29,10 +36,6 @@ export USE_PREBUILT_CACHE=1
 export PREBUILT_CACHE_DIR=~/.ccache
 export CCACHE_DIR=~/.ccache
 ccache -M 30G
-
-###### SET UP DIRS
-source_dir="$(pwd)"
-makefile=$source_dir/Makefile
 
 ###### AUTO VERSIONING
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
@@ -94,10 +97,9 @@ LD="LD=$path2/ld.lld"
 THREADS=-j$(nproc --all)
 
 ###### SETUP KERNEL CONFIG
-stableconfig=thanas_defconfig
 sudo rm -rf .config
 sudo rm -rf .config.old
-cp $stableconfig .config
+cp $defconfig .config
 Keys.ENTER | make CC=clang-11 localmodconfig
 ### optionally modify defconfig prior to compilation
 ### unhash "#make menuconfig" underneath for customization
@@ -115,7 +117,7 @@ Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD modules
 
 ###### START AUTO INSTALLATION
 ### check to see if all went successfull
-if [ -e $source_dir/arch/x86/boot/vmlinux.bin ]; then
+if [ -e $source/arch/x86/boot/vmlinux.bin ]; then
 ### install
 sudo make $THREADS modules_install
 sudo make $THREADS install
@@ -129,7 +131,7 @@ echo "setting up userspace kernel configuration & system optimizations"
 echo "on root filesystem /init.sh can be found, adjust it to your needs"
 echo "these will be removed once the uninstall script has been executed"
 echo -e "${restore}"
-cd $source_dir
+cd $source
 chmod +x init.sh
 sudo \cp init.sh /init.sh
 if grep -q "@reboot root /init.sh" /etc/crontab
@@ -152,7 +154,7 @@ echo ...
 echo ...
 echo YOU CAN REBOOT RN...
 echo -e "${yellow}"
-cat $source_dir/include/generated/compile.h
+cat $source/include/generated/compile.h
 echo "-------------------"
 echo "Build Completed in:"
 echo "-------------------"
@@ -181,8 +183,8 @@ fi;
 
 ### detect output files and ask to clean source
 function clean_all {
-if [ -e $source_dir/arch/x86/boot/vmlinux.bin ]; then
-cd $source_dir && sudo make clean && sudo make mrproper
+if [ -e $source/arch/x86/boot/vmlinux.bin ]; then
+cd $source && sudo make clean && sudo make mrproper
 fi;
 }
 while read -p "Clean stuff (y/n)? " cchoice
@@ -204,11 +206,11 @@ case "$cchoice" in
         ;;
 esac
 done
-if [ -e $source_dir/arch/x86/boot/vmlinux.bin ]; then
+if [ -e $source/arch/x86/boot/vmlinux.bin ]; then
 
 echo -e "${yellow}"
 echo overriding option, force clean due to build success
-cd $source_dir && sudo make clean && sudo make mrproper
+cd $source && sudo make clean && sudo make mrproper
 fi;
 
 ###### END

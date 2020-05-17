@@ -8,11 +8,11 @@ yellow="\033[1;93m"
 magenta="\033[05;1;95m"
 restore="\033[0m"
 
-###### SET UP DIRS
-source_dir="$(pwd)"
+###### SET VARIABLES
+source="$(pwd)"
 tc=~/TOOLCHAIN/clang
 
-###### UPGRADE COMPILERS PRIOR TO COMPILATION
+###### ADD SOURCES
 echo -e "${yellow}"
 echo "Adding llvm-11 repository"
 echo "and upgrading system compilers"
@@ -34,7 +34,8 @@ for i in ${!new_sources[@]}; do
         wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
     fi
 done
-### upgrade compilers
+
+### UPGRADE COMPILERS
 sudo apt update
 sudo apt -f install -y aptitude
 sudo aptitude -f install -y clang-11 lld-11
@@ -43,7 +44,8 @@ sudo aptitude -f install -y gcc-10
 sudo aptitude -f install -y gcc clang binutils make flex bison bc build-essential libncurses-dev libssl-dev libelf-dev qt5-default
 cd $tc && git pull && cd $source
 sudo apt -f install -y && apt -f --fix-broken install -y apt -f upgrade -y
-### completion
+
+### COMPLETION
 echo -e "${magenta}"
 echo "llvm-11 installed and the rest of the toolchain updated!"
 echo -e "${restore}"

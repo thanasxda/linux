@@ -9,6 +9,13 @@ yellow="\033[1;93m"
 magenta="\033[05;1;95m"
 restore="\033[0m"
 
+###### SET VARIABLES
+### dirs
+source_dir="$(pwd)"
+makefile=$source_dir/Makefile
+### config
+defconfig=stock_defconfig
+
 ###### UPGRADE COMPILERS PRIOR TO COMPILATION
 echo -e "${yellow}"
 echo "UPDATING CURRENT COMPILERS PRIOR TO INSTALLATION"
@@ -27,10 +34,6 @@ export USE_PREBUILT_CACHE=1
 export PREBUILT_CACHE_DIR=~/.ccache
 export CCACHE_DIR=~/.ccache
 ccache -M 30G
-
-###### SET UP DIRS
-source_dir="$(pwd)"
-makefile=$source_dir/Makefile
 
 ###### AUTO VERSIONING
 VERSION=$(cat $makefile | head -2 | tail -1 | cut -d '=' -f2)
@@ -80,9 +83,10 @@ CLANG="CC=clang
 THREADS=-j$(nproc --all)
 
 ###### SETUP KERNEL CONFIG
-stableconfig=stock_defconfig
+
 sudo rm -rf .config
 sudo rm -rf .config.old
+cp $defconfig .config
 #Keys.ENTER | make "CC=clang" localmodconfig
 ### optionally modify defconfig prior to compilation
 ### unhash ""#make menuconfig" underneath for customization
