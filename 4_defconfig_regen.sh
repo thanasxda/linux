@@ -12,7 +12,8 @@ echo OPENING UP KERNEL CONFIGURATION
 echo -e "${restore}"
 
 ###### KERNEL DEFCONFIG SELECTION
-#stableconfig=stock_defoncfig
+#defconfig=stock_defconfig
+#defconfig=kali_defconfig
 defconfig=thanas_defconfig
 rm -rf .config
 rm -rf .config.old
@@ -28,14 +29,14 @@ cp $defconfig .config
 ### compiler used CC=clang - as to show up correctly
 #make CC=clang xconfig
 ### getting issues on other distros, for now using failsafe methods. normally not needed.
-#path=/usr/bin
-#path2=/usr/lib/llvm-11/bin
+path=/usr/bin
+path2=/usr/lib/llvm-11/bin
 #xpath=~/TOOLCHAIN/clang/bin
-#export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
-#export PATH=""$path2":$PATH"
-#CLANG="CC=$path/clang
-#        HOSTCC=$path/clang"
-#LD="LD=$path2/ld.lld"
+export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
+export PATH=""$path2":$PATH"
+CLANG="CC=$path/clang
+        HOSTCC=$path/clang"
+LD="LD=$path2/ld.lld"
 make $CLANG $LD menuconfig
 cp .config $defconfig
 

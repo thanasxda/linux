@@ -1,9 +1,7 @@
 thanas-x86-64-kernel
 ====================
 modded fork of torvalds dev git.
-auto install - use "1_build.sh" if it fails to build use "2_build_failsafe.sh"
-extended instructions can be found in every script.
-
+auto install - use "MENU.sh".
 also preconfigured in:
 - [basic-linux-setup](https://github.com/thanasxda/basic-linux-setup.git)
 

@@ -19,12 +19,13 @@ PATCHLEVEL=$(echo "$PATCHLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 SUBLEVEL=$(echo "$SUBLEVEL" | awk -v FPAT="[0-9]+" '{print $NF}')
 #EXTRAVERSION="$(echo -e "${EXTRAVERSION}" | sed -e 's/^[[:space:]]*//')"
 #KERNELVERSION="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}${EXTRAVERSION}"
+### hash out if removing manually
 RC_KERNEL="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"-rc*
 
 ### for deletion of a specific version or older than current version
 ### input kernelname into one of the "manual='name_here*'" underneath
 ### note that the usage of * will remove any kernel starting with that name
-manual=5.7.0-rc4*
+manual=5.7.0-rc5*
 
 echo -e "${magenta}"
 echo REMOVING ALL INSTALLED RELEASE CANDIDATE WITH VESIONING $RC_KERNEL KERNELS FOUND ON THE SYSTEM VERSIONS!
