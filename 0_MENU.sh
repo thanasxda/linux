@@ -63,7 +63,8 @@ o7=$b"*CLEAN SOURCE*$c$h
 "$c$a
 o8=$b"*INSTALL LATEST LLVM/CLANG COMPILERS*$c$h
                     - ensuring the kernel is compiled with the latest compilers,
-                      choose if you have issues.
+                      choose if you have issues. make sure you have llvm/clang toolchain,
+                      otherwise its a necessity to run this prior.
 "$c$a
 o9=$b"*UNINSTALL KERNEL & REVERT OPTIMIZATIONS*$c$h
 

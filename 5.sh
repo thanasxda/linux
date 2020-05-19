@@ -23,9 +23,13 @@ echo "ENSURING THE KERNEL IS ALWAYS BUILT WITH THE LATEST COMPILERS"
 echo -e "${restore}"
 sudo apt update
 sudo apt -f install -y aptitude
+sudo aptitude -f install -y llvm-11
+sudo aptitude -f install -y llvm
 sudo aptitude -f install -y clang-11 lld-11
 sudo aptitude -f install -y clang-10 lld-10
 sudo aptitude -f install -y gcc-10
+sudo aptitude -f install -y gcc-multilib
+sudo aptitude -f install -y gcc-10-multilib
 sudo aptitude -f install -y gcc clang binutils make flex bison bc build-essential libncurses-dev libssl-dev libelf-dev qt5-default
 
 ###### SET UP CCACHE
@@ -60,11 +64,11 @@ echo -e "${restore}"
 ### if "CC=clang-10" is being used, -mllvm -polly optimizations will be enabled
 ### not included in clang-11 for now, due to compiler errors
 #export CROSS_COMPILE=/usr/bin/x86_64-linux-gnu-
-#path=/usr/bin
-#path2=/usr/lib/llvm-11/bin
-#xpath=~/TOOLCHAIN/clang/bin
-#export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
-#export PATH=""$path":$PATH"
+path=/usr/bin
+path2=/usr/lib/llvm-11/bin
+xpath=~/TOOLCHAIN/clang/bin
+export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$LD_LIBRARY_PATH"
+export PATH=""$path":$PATH"
 
 CLANG="CC=clang
         HOSTCC=clang"
@@ -83,10 +87,10 @@ CLANG="CC=clang
 THREADS=-j$(nproc --all)
 
 ###### SETUP KERNEL CONFIG
-
 sudo rm -rf .config
 sudo rm -rf .config.old
 cp $defconfig .config
+
 #Keys.ENTER | make "CC=clang" localmodconfig
 ### optionally modify defconfig prior to compilation
 ### unhash ""#make menuconfig" underneath for customization

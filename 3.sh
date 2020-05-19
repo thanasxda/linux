@@ -1,7 +1,6 @@
 #!/bin/bash
 ### THANAS x86-64 KERNEL - MODDED TORVALDS DEVELOPMENT FORK
 ### built with llvm/clang by default.
-### failsafe buildscript - for when facing compiler issues
 ### make sure to ./install-toolchain.sh prior
 ### build without retpoline
 ###########################################################
@@ -26,9 +25,13 @@ echo "ENSURING THE KERNEL IS ALWAYS BUILT WITH THE LATEST COMPILERS"
 echo -e "${restore}"
 sudo apt update
 sudo apt -f install -y aptitude
+sudo aptitude -f install -y llvm-11
+sudo aptitude -f install -y llvm
 sudo aptitude -f install -y clang-11 lld-11
 sudo aptitude -f install -y clang-10 lld-10
 sudo aptitude -f install -y gcc-10
+sudo aptitude -f install -y gcc-multilib
+sudo aptitude -f install -y gcc-10-multilib
 sudo aptitude -f install -y gcc clang binutils make flex bison bc build-essential libncurses-dev libssl-dev libelf-dev qt5-default
 
 ###### SET UP CCACHE
@@ -70,28 +73,29 @@ path2=/usr/lib/llvm-11/bin
 xpath=~/TOOLCHAIN/clang/bin
 export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
 export PATH=""$path2":$PATH"
-CLANG="CC=$path/clang
-        HOSTCC=$path/clang"
-        #AR=$path2/llvm-ar
-        #NM=$path2/llvm-nm
-        #OBJCOPY=$path2/llvm-objcopy
-        #OBJDUMP=$path2/llvm-objdump
-        #READELF=$path2/llvm-readelf
-        #OBJSIZE=$path2/llvm-size
-        #STRIP=$path2/llvm-strip
-        #LD=$path2/ld.lld"
+#CLANG="CC=$xpath/clang
+#        HOSTCC=$xpath/clang
+#        AR=$xpath/llvm-ar
+#        NM=$xpath/llvm-nm
+#        OBJCOPY=$xpath/llvm-objcopy
+#        OBJDUMP=$xpath/llvm-objdump
+#        READELF=$xpath/llvm-readelf
+#        OBJSIZE=$xpath/llvm-size
+#        STRIP=$xpath/llvm-strip
+#        LD=$xpath/ld.lld"
 
 ### set to system compiler
-#CLANG="CC=clang
-#        HOSTCC=clang
-#        NM=llvm-nm
-#        OBJCOPY=llvm-objcopy
-#        OBJDUMP=llvm-objdump
-#        READELF=llvm-readelf
-#        OBJSIZE=llvm-size
-#        STRIP=llvm-strip"
+CLANG="CC=clang-11
+        HOSTCC=clang-11
+        AR=llvm-ar-11
+        NM=llvm-nm-11
+        OBJCOPY=llvm-objcopy
+        OBJDUMP=llvm-objdump
+        READELF=llvm-readelf
+        OBJSIZE=llvm-size
+        STRIP=llvm-strip"
 ### optionally set linker seperately
-LD="LD=$path2/ld.lld"
+LD="LD=ld.lld-11"
 ### enable verbose output for debugging
 #VERBOSE="V=1"
 ### ensure all cpu threads are used for compilation
@@ -102,7 +106,7 @@ sudo rm -rf .config
 sudo rm -rf .config.old
 cp $defconfig .config
 
-Keys.ENTER | make CC=clang-11 localmodconfig
+Keys.ENTER | sudo make $CLANG $LD localmodconfig
 ### optionally modify defconfig prior to compilation
 ### unhash "#make menuconfig" underneath for customization
 ### note this is temporary since the default config gets replaced prior to each compilation

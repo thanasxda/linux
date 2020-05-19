@@ -31,7 +31,7 @@ cp $defconfig .config
 ### getting issues on other distros, for now using failsafe methods. normally not needed.
 path=/usr/bin
 path2=/usr/lib/llvm-11/bin
-#xpath=~/TOOLCHAIN/clang/bin
+xpath=~/TOOLCHAIN/clang/bin
 export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
 export PATH=""$path2":$PATH"
 CLANG="CC=$path/clang
