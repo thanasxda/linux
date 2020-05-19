@@ -2,6 +2,12 @@ thanas-x86-64-kernel
 ====================
 modded fork of torvalds dev git.
 auto install - use "MENU.sh".
+
+**copy & paste underneath line in console to start:**
+
+```
+git clone --depth=1 https://github.com/thanasxda/thanas-x86-64-kernel.git && cd thanas-x86-64-kernel && sudo chmod 755 *.sh && ./0_MENU.sh
+```
 also preconfigured in:
 - [basic-linux-setup](https://github.com/thanasxda/basic-linux-setup.git)
 
