@@ -6,36 +6,40 @@ red="\033[1;91m"
 yellow="\033[1;93m"
 green="\033[1;32m"
 restore="\033[0m"
+a=$(echo -e "${yellow}")
+b=$(echo -e "${green}")
+c=$(echo -e "${restore}")
+d=$(echo -e "${bgr}")
 kernel=THANAS-x86-64-KERNEL
-keffect=$(echo -e "${blink}")"$kernel"$(echo -e "${restore}")$(echo -e "${green}")
-PS3=$(echo -e "${restore}")'Please enter your choice: '
+keffect=$(echo -e "${blink}")"$kernel"$c$b
+PS3=$c'Please enter your choice: '
 echo -e "${yellow}"
-echo "        $(echo -e "${green}")..::::::$keffect$(echo -e "${bgr}")::$(echo -e "$blink")MENU$(echo -e "${restore}")$(echo -e "${green}")::::::.."
+echo "        $b..::::::$keffect$d::$(echo -e "$blink")MENU$c$b::::::.."
 echo ""
 echo ""
 echo -e "${yellow}"
-o1=$(echo -e "${green}")"*BUILD $keffect$(echo -e "${green}")*$(echo -e "${restore}")
+o1=$b"*BUILD $keffect$b*$c
                     - regular buildscript using llvm/clang-11 toolchain.
-"$(echo -e "${yellow}")
-o2=$(echo -e "${green}")"*BUILD $keffect IN FAILSAFE MODE*$(echo -e "${restore}")
+"$a
+o2=$b"*BUILD $keffect IN FAILSAFE MODE*$c
                     - use this when building with option 1) fails.
-"$(echo -e "${yellow}")
-o3=$(echo -e "${green}")"*BUILD STOCK KERNEL OUT OF THIS SOURCE*$(echo -e "${restore}")
+"$a
+o3=$b"*BUILD STOCK KERNEL OUT OF THIS SOURCE*$c
                     - keep in mind this won't use localmodconfig
                       to compile system specific drivers only.
                       this will take a long long time!!!
-"$(echo -e "${yellow}")
-o4=$(echo -e "${green}")"*ENTER KERNEL MENU CONFIGURATION*$(echo -e "${restore}")
+"$a
+o4=$b"*ENTER KERNEL MENU CONFIGURATION*$c
                     - optionally adjust prior to build.
-"$(echo -e "${yellow}")
-o5=$(echo -e "${green}")"*CLEAN SOURCE*$(echo -e "${restore}")
+"$a
+o5=$b"*CLEAN SOURCE*$c
                     - ensuring a clean build.
-"$(echo -e "${yellow}")
-o6=$(echo -e "${green}")"*INSTALL LATEST LLVM/CLANG COMPILERS*$(echo -e "${restore}")
+"$a
+o6=$b"*INSTALL LATEST LLVM/CLANG COMPILERS*$c
                     - ensuring the kernel is compiled with the latest compilers,
                       choose if you have issues.
-"$(echo -e "${yellow}")
-o7=$(echo -e "${green}")"*UNINSTALL KERNEL & REVERT OPTIMIZATIONS*
+"$a
+o7=$b"*UNINSTALL KERNEL & REVERT OPTIMIZATIONS*
 
 "$(echo -e "${red}")
 options=("$o1" "$o2" "$o3" "$o4" "$o5" "$o6" "$o7" "Quit")
