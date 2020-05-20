@@ -45,5 +45,10 @@ clear
 echo -e "${yellow}"
 echo KERNEL DEFCONFIG REGENERATED
 echo -e "${restore}"
+sleep 2
+clear
+
+### reopen menu
+./0*
 
 ###### END

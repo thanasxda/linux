@@ -18,5 +18,10 @@ sudo make clean && sudo make mrproper
 echo -e "${yellow}"
 echo Source cleaned
 echo -e "${restore}"
+sleep 2
+clear
+
+### reopen menu
+./0*
 
 ###### END

@@ -73,5 +73,10 @@ echo -e "${restore}"
 read -p "Press Enter to reboot or Ctrl+C to cancel"
 
 sudo reboot
+sleep 2
+clear
+
+### reopen menu
+./0*
 
 ###### END

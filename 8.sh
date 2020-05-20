@@ -53,5 +53,10 @@ sudo apt -f install -y && apt -f --fix-broken install -y apt -f upgrade -y
 echo -e "${magenta}"
 echo "llvm-11 installed and the rest of the toolchain updated!"
 echo -e "${restore}"
+sleep 2
+clear
+
+### reopen menu
+./0*
 
 ###### END

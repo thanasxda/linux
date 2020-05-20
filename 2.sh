@@ -218,4 +218,7 @@ echo overriding option, force clean due to build success
 cd $source && sudo make clean && sudo make mrproper
 fi;
 
+### reopen menu
+./0*
+
 ###### END
