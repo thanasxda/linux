@@ -773,26 +773,38 @@ LLVM_DIS	:= llvm-dis
 #KBUILD_CFLAGS	+= -fvisibility=hidden -flto
 
 ### flags that apply to clang-10 strictly
-ifeq ($(cc-name),clang-10)
-KBUILD_CFLAGS	+= -mllvm -polly \
+#ifeq ($(cc-name),clang-10)
+
+### polly on clang-11 is not officially supported yet
+### there is a workaround in the script for toolchain installation
+### to copy the polly libraries to their location for clang-11
+### do not change this unless you know what you are doing
+polly=/usr/lib/llvm-11/lib/LLVMPolly.so
+KBUILD_CFLAGS	+= -Xclang -load -Xclang $(polly) \
+			 -mllvm -polly \
 		   -mllvm -polly-run-dce \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-opt-fusion=max \
-		   -mllvm -polly-vectorizer=polly \
-
-		  #-mllvm -polly-omp-backend=LLVM \
+			 -mllvm -polly-omp-backend=LLVM \
 		   -mllvm -polly-scheduling=dynamic \
-		   -mllvm -polly-scheduling-chunksize=1 \
+			 -mllvm -polly-scheduling-chunksize=1 \
 		   -mllvm -polly-opt-maximize-bands=yes \
 		   -mllvm -polly-position=after-loopopt \
-		   -mllvm -polly-opt-fusion=max \
+			 -mllvm -polly-ast-detect-parallel \
 		   -mllvm -polly-ast-use-context \
-		   -mllvm -polly-detect-keep-going \
-		   -mllvm -polly-vectorizer=stripmine \
 		   -mllvm -polly-opt-simplify-deps=no \
 		   -mllvm -polly-rtc-max-arrays-per-group=40 \
-		   -mllvm -polly-invariant-load-hoisting
-endif
+			 -mllvm -polly-parallel \
+
+
+#			 -mllvm -polly-invariant-load-hoisting \
+			 -mllvm -polly-detect-keep-going \
+			 -mllvm -polly-vectorizer=polly \
+			 -mllvm -polly-vectorizer=stripmine \
+			 -mllvm -polly-parallel-force \
+
+
+#endif
 
 ### GCC SETUP - flags that apply to gcc only
 ifeq ($(cc-name),gcc$(GCC_VERSION))

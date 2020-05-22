@@ -38,14 +38,17 @@ echo ""$c$h
 echo "        Linux kernel source tree - modded torvalds git fork."
 echo "        built with localmodconfig on llvm/clang-11..."
 echo "        lld -O3 -march=native -funroll-loops mitigations=off"
-echo "        and clear linux optimizations (optional -polly) etc."
+echo "        polly & several optimizations used by clear linux etc."
 echo "        kernel is prone towards realtime optimization. - except of option $stock".
 echo "        PLUGIN ALL DEVICES PRIOR TO COMPILATION!!! - only when using options $normal, $failsafe or $retpoline."
 echo "        supposed to be compiled on the hardware it is intended to run on,"
 echo "        due to code optimization to local cpu and system specific auto kernel configuration."
 echo "        all scripts use llvm/clang-11 for compatibility issues across dristro's."
-echo "        make sure to run $toolchain installing llvm/clang-11 if you don't have it."
+echo "        make sure to run $toolchain installing llvm/clang-11."
 echo "        this will also ensure a better binary and better performance."
+echo "        as of yet this source is modded to build with clang+polly only."
+echo "        for this reason it is$e NECESSARY!!!$c$h to run option $toolchain at least once,"
+echo "        this will ensure a workaround for as of yet missing official support for polly on llvm/clang-11."
 echo "        toolchain installation scripted for debian based distro's."
 echo "        for ease of use every single script within this source"
 echo "        comes with extensive instructions, in case of personalization or else."
@@ -110,8 +113,10 @@ o7=$b$i"*CLEAN SOURCE*$c$h
                       only apply when facing compiler errors
                       or if you are concerned with clean builds.
 "$c$a
-o8=$b$i"*INSTALL LATEST LLVM/CLANG COMPILER*$c$h
-                    - ensuring the kernel is compiled with the latest compilers,
+o8=$b$i"*INSTALL LATEST LLVM/CLANG COMPILER & WORKAROUND FOR POLLY SUPPORT*$c$h
+                    - as of yet llvm/clang-11 doesn't officially support polly optimizations.
+                      make sure to run this option at least once to let the script take care of that.
+                      ensuring the kernel is compiled with the latest compilers,
                       choose if you have issues. make sure you have the full build environment
                       and llvm/clang-11 toolchain, otherwise it's a necessity to run this prior.
                       using updated compilers can bring benefits.

@@ -12,6 +12,18 @@ restore="\033[0m"
 source="$(pwd)"
 tc=~/TOOLCHAIN/clang
 
+###### MANUALLY INSTALL LLVM/CLANG-11 POLLY SUPPORT FOR NOW
+### do this prior to clang-11 installation so that if support will officially come
+### it will be overridden by the official latest clang libraries
+echo -e "${yellow}"
+echo "Adding support for clang-11 polly..."
+echo ""
+echo "done!"
+echo -e "${restore}"
+polly=/usr/lib/llvm-11/lib
+sudo mkdir -p $polly
+sudo \cp -rf $source/THANAS/LLVMPolly.so $polly/
+
 ###### ADD SOURCES
 echo -e "${yellow}"
 echo "Adding llvm-11 repository"
@@ -40,8 +52,8 @@ sudo apt update
 sudo apt -f install -y aptitude
 sudo aptitude -f install -y llvm-11
 sudo aptitude -f install -y llvm
-sudo aptitude -f install -y clang-11 lld-11
-sudo aptitude -f install -y clang-10 lld-10
+sudo aptitude -f install -y clang-11 lld-11 libclang-common-11-dev
+sudo aptitude -f install -y clang-10 lld-10 libclang-common-10-dev
 sudo aptitude -f install -y gcc-10
 sudo aptitude -f install -y gcc-multilib
 sudo aptitude -f install -y gcc-10-multilib
@@ -57,6 +69,7 @@ sleep 2
 clear
 
 ### reopen menu
+cd $source
 ./0*
 
 ###### END
