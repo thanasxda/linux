@@ -20,31 +20,45 @@ h=$(echo -e "${italic}")
 i=$(echo -e "${underline}")
 kernel=THANAS-x86-64-KERNEL
 keffect=$g$kernel$c$b
+normal=$a"1)"$c$h
+failsafe=$a"2)"$c$h
+retpoline=$a"3)"$c$h
+localmodconfig=$a"4)"$c$h
+stock=$a"5)"$c$h
+menuconfig=$a"6)"$c$h
+clean=$a"7)"$c$h
+toolchain=$a"8)"$c$h
+uninstall=$a"9)"$c$h
 PS3=$c$h$f'
 
-Please enter your choice: '
+Please enter your choice:  '$c$a
 echo ""
-echo "        $b..::::::$f$keffect"$d"::$f"MENU"$c$b::::::.."
+echo "        $b..:::::::$f$keffect"$d"::$f"MENU"$c$b:::::::.."
 echo ""$c$h
 echo "        Linux kernel source tree - modded torvalds git fork."
-echo "        built with localmodconfig on llvm/clang..."
+echo "        built with localmodconfig on llvm/clang-11..."
 echo "        lld -O3 -march=native -funroll-loops mitigations=off"
 echo "        and clear linux optimizations (optional -polly) etc."
-echo "        PLUGIN ALL DEVICES PRIOR TO COMPILATION!!! - only when using options 1), 2) or 3)."
+echo "        kernel is prone towards realtime optimization. - except of option $stock".
+echo "        PLUGIN ALL DEVICES PRIOR TO COMPILATION!!! - only when using options $normal, $failsafe or $retpoline."
 echo "        supposed to be compiled on the hardware it is intended to run on,"
 echo "        due to code optimization to local cpu and system specific auto kernel configuration."
-echo "        all scripts use llvm/clang-11 for compatibility issues across dristros."
-echo "        make sure to run 8) installing llvm/clang-11 if you don't have it."
-echo "        this will also ensure a better binary and more performance."
-echo "        comes with kernel/userspace preconfiguration."
-echo "        auto installation/reboot to new kernel."
+echo "        all scripts use llvm/clang-11 for compatibility issues across dristro's."
+echo "        make sure to run $toolchain installing llvm/clang-11 if you don't have it."
+echo "        this will also ensure a better binary and better performance."
+echo "        toolchain installation scripted for debian based distro's."
+echo "        for ease of use every single script within this source"
+echo "        comes with extensive instructions, in case of personalization or else."
+echo "        also includes kernel/userspace preconfiguration."
+echo "        auto compilation, installation and reboot to new kernel."
 echo ""$c$a
 o1=$b$i"*BUILD $keffect$b$i*$c$h
                     - regular buildscript using llvm/clang-11 toolchain.
 "$c$a
 o2=$b$i"*BUILD $keffect$i IN FAILSAFE MODE*$c$h
-                    - use this when building with option 1) fails.
-                      recommended for most people who face issues compiling.
+                    - use this when building with option $normal fails.
+                      recommended for most people facing issues compiling.
+                      (uses different paths)
 "$c$a
 o3=$b$i"*BUILD $keffect$i W/O RETPOLINE*$c$h
                     - build kernel with retpoline disabled,
@@ -53,18 +67,22 @@ o3=$b$i"*BUILD $keffect$i W/O RETPOLINE*$c$h
 "$c$a
 o4=$b$i"*BUILD $keffect$i W/O LOCALMODCONFIG*$c$h
                     - build $kernel without using localmodconfig.
-                      this will build the kernel also with drivers that will be unused.
-                      use this when option 1), 2) and 3) fail to boot.
-                      unlike option 5) this will still ensure the custom kernels integrity.
-                      this will take a long time! possibly relatively less than option 5).
+                      this will build the kernel including unused drivers.
+                      use this when option $normal, $failsafe and $retpoline fail to boot.
+                      (due to not auto enabling system specific drivers in localmodconfig)
+                      unlike option $stock this will still ensure the custom kernels integrity.
+                      this will take a long time! possibly relatively less than option $stock.
 "$c$a
 o5=$b$i"*BUILD STOCK KERNEL OUT OF THIS SOURCE*$c$h
                     - keep in mind this won't use localmodconfig
                       to compile system specific drivers only.
                       neither will this use $kernel configuration.
+                      it will use the mainline kernel configuration instead.
                       however it will still benefit from patches applied
-                      to source which are not included in stock.
+                      to source as well as compiler optimizations
+                      and kernel/userspace preconfig which are not included in stock.
                       overall this must be bootable on every x86_64 system.
+                      even for legacy, embedded devices and cpu's other than intel/amd.
                       do not expect the same performance as the options above.
                       this will take a long long time!!!
 "$c$a
@@ -76,78 +94,88 @@ o6=$b$i"*ENTER KERNEL MENU CONFIGURATION*$c$h
                       https://cateee.net/lkddb/web-lkddb/ for descriptions.
                       rare cases when using localmodconfig,
                       certain drivers are not auto enabled thus,
-                      making options 1), 2) and 3) unbootable.
+                      making options $normal, $failsafe and $retpoline unbootable.
                       optionally enable manually for these stubborn cases.
+                      or just explore the options out of curiosity.
+                      remember this is an rc kernel from torvalds git,
+                      proprietary drivers (if being used at all)
+                      sometimes need to catch up on its development.
 "$c$a
 o7=$b$i"*CLEAN SOURCE*$c$h
                     - ensuring a clean build.
+                      this cleans source of cache/precompiled data
+                      which in some cases can be reused.
                       this should generally not be necessary.
                       avoiding this also speeds up future builds drastically.
-                      only apply when facing compiler errors.
+                      only apply when facing compiler errors
+                      or if you are concerned with clean builds.
 "$c$a
-o8=$b$i"*INSTALL LATEST LLVM/CLANG COMPILERS*$c$h
+o8=$b$i"*INSTALL LATEST LLVM/CLANG COMPILER*$c$h
                     - ensuring the kernel is compiled with the latest compilers,
-                      choose if you have issues. make sure you have llvm/clang-11 toolchain,
-                      otherwise its a necessity to run this prior.
+                      choose if you have issues. make sure you have the full build environment
+                      and llvm/clang-11 toolchain, otherwise it's a necessity to run this prior.
+                      using updated compilers can bring benefits.
+                      scripted for debian based distro's.
 "$c$a
 o9=$b$i"*UNINSTALL KERNEL & REVERT OPTIMIZATIONS*$c$h
                     - this will automatically uninstall the kernel,
-                      and it's kernel/userspace preconfigurations.
+                      and its kernel/userspace preconfigurations.
+                      script $uninstall also has the ability of manual input uninstallation.
 
 "$c$e
-options=("$o1" "$o2" "$o3" "$o4" "$o5" "$o6" "$o7" "$o8" "$o9" "$e$i*QUIT*")
+options=("$o1" "$o2" "$o3" "$o4" "$o5" "$o6" "$o7" "$o8" "$o9" "$e$i*QUIT!*")
 select opt in "${options[@]}"
 do
 echo -e "${restore}"
     case $opt in
         "$o1")
-            echo $a"you chose choice 1"
-            echo $e"build starting"
+            echo $a"you chose option 1"
+            echo $e"build starting..."
             ./1*
             ;;
         "$o2")
-            echo $a"you chose choice 2"
-            echo $e"failsafe build starting"
+            echo $a"you chose option 2"
+            echo $e"failsafe build starting..."
             ./2*
             ;;
         "$o3")
-            echo $a"you chose choice 3"
-            echo $e"build without retpoline starting"
+            echo $a"you chose option 3"
+            echo $e"build without retpoline starting..."
             ./3*
             ;;
         "$o4")
-            echo $a"you chose choice 4"
-            echo $e"build without localmodconfig starting"
+            echo $a"you chose option 4"
+            echo $e"build without localmodconfig starting..."
             ./4*
             ;;
         "$o5")
-            echo $a"you chose choice 5"
-            echo $e"stock build starting"
+            echo $a"you chose option 5"
+            echo $e"stock build starting..."
             ./5*
             ;;
         "$o6")
-            echo $a"you chose choice 6"
-            echo $e"starting kernel config"
+            echo $a"you chose option 6"
+            echo $e"starting kernel config..."
             ./6*
             ;;
         "$o7")
-            echo $a"you chose choice 7"
-            echo $e"cleaning sources"
+            echo $a"you chose option 7"
+            echo $e"cleaning sources..."
             ./7*
             ;;
         "$o8")
-            echo $a"you chose choice 8"
-            echo $e"installing llvm/clang-11 toolchain"
+            echo $a"you chose option 8"
+            echo $e"installing llvm/clang-11 toolchain..."
             ./8*
             ;;
         "$o9")
-            echo $a"you chose choice 9"
-            echo $e"uninstalling kernel and linux optimizations"
+            echo $a"you chose option 9"
+            echo $e"uninstalling kernel and linux optimizations..."
             ./9*
             ;;
-        "$e$i*QUIT*")
+        "$e$i*QUIT!*")
             break
             ;;
-        *) echo $e"U high? srsly? $a$REPLY$e?";;
+        *) echo $e"U high? srsly? $a$REPLY$e?!";;
     esac
 done
