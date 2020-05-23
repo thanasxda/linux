@@ -18,11 +18,11 @@ tc=~/TOOLCHAIN/clang
 echo -e "${yellow}"
 echo "Adding support for clang-11 polly..."
 echo ""
-echo "done!"
-echo -e "${restore}"
 polly=/usr/lib/llvm-11/lib
 sudo mkdir -p $polly
 sudo \cp -rf $source/THANAS/LLVMPolly.so $polly/
+echo "done!"
+echo -e "${restore}"
 
 ###### ADD SOURCES
 echo -e "${yellow}"

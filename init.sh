@@ -90,7 +90,7 @@ echo "1" > /proc/sys/vm/oom_kill_allocating_task
 echo "1200" > /proc/sys/vm/stat_interval
 echo "10" > /proc/sys/vm/vfs_cache_pressure
 echo "90" > /proc/sys/vm/swappiness
-sudo sysctl vm.swappiness=90
+sysctl vm.swappiness=90
 
 ###### CPU
 ################################
@@ -100,9 +100,9 @@ function setgov ()
     echo "performance" | sudo tee /sys/devices/system/cpu/cpufreq/policy*/scaling_governor
 }
 ### workqueues
-sudo chmod 666 /sys/module/workqueue/parameters/power_efficient
-sudo chown root /sys/module/workqueue/parameters/power_efficient
-sudo bash -c 'echo "N"  > /sys/module/workqueue/parameters/power_efficient'
+chmod 666 /sys/module/workqueue/parameters/power_efficient
+chown root /sys/module/workqueue/parameters/power_efficient
+bash -c 'echo "N"  > /sys/module/workqueue/parameters/power_efficient'
 
 ###### EXTRAS
 ################################
@@ -194,6 +194,6 @@ fi;
 ###### SCHEDULE FSTRIM ONCE WEEKLY
 ################################
 ### rerunning this same command will not trigger reset in timer
-sudo systemctl start fstrim.timer
+systemctl start fstrim.timer
 
 ###### END

@@ -46,7 +46,7 @@ echo "        due to code optimization to local cpu and system specific auto ker
 echo "        all scripts use llvm/clang-11 for compatibility issues across dristro's."
 echo "        make sure to run $toolchain installing llvm/clang-11."
 echo "        this will also ensure a better binary and better performance."
-echo "        as of yet this source is modded to build with clang+polly only."
+echo "        as of yet this source is modded to build with clang-11+polly only."
 echo "        for this reason it is$e NECESSARY!!!$c$h to run option $toolchain at least once,"
 echo "        this will ensure a workaround for as of yet missing official support for polly on llvm/clang-11."
 echo "        toolchain installation scripted for debian based distro's."

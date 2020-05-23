@@ -23,14 +23,7 @@ echo "ENSURING THE KERNEL IS ALWAYS BUILT WITH THE LATEST COMPILERS"
 echo -e "${restore}"
 sudo apt update
 sudo apt -f install -y aptitude
-sudo aptitude -f install -y llvm-11
-sudo aptitude -f install -y llvm
-sudo aptitude -f install -y clang-11 lld-11
-sudo aptitude -f install -y clang-10 lld-10
-sudo aptitude -f install -y gcc-10
-sudo aptitude -f install -y gcc-multilib
-sudo aptitude -f install -y gcc-10-multilib
-sudo aptitude -f install -y gcc clang binutils make flex bison bc build-essential libncurses-dev libssl-dev libelf-dev qt5-default
+sudo aptitude -f install -y llvm-11 llvm clang-11 lld-11 clang-10 lld-10 gcc-10 gcc-multilib gcc-10-multilib gcc clang binutils make flex bison bc build-essential libncurses-dev libssl-dev libelf-dev qt5-default libclang-common-11-dev libclang-common-10-dev
 
 ###### SET UP CCACHE
 export USE_CCACHE=1
