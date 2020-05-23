@@ -39,7 +39,7 @@ echo "        Linux kernel source tree - modded torvalds git fork."
 echo "        built with localmodconfig on llvm/clang-11..."
 echo "        lld -O3 -march=native -funroll-loops mitigations=off"
 echo "        polly & several optimizations used by clear linux etc."
-echo "        kernel is prone towards realtime optimization. - except of option $stock".
+echo "        kernel is prone towards realtime optimization and mainly for desktop. - except for option $stock".
 echo "        PLUGIN ALL DEVICES PRIOR TO COMPILATION!!! - only when using options $normal, $failsafe or $retpoline."
 echo "        supposed to be compiled on the hardware it is intended to run on,"
 echo "        due to code optimization to local cpu and system specific auto kernel configuration."

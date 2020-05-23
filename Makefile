@@ -400,11 +400,11 @@ HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
 ifneq ($(LLVM),)
-HOSTCC       = clang$(LLVM_VERSION)
-HOSTCXX      = clang++$(LLVM_VERSION)
+HOSTCC       = clang
+HOSTCXX      = clang++
 else
-HOSTCC	= gcc$(GCC_VERSION)
-HOSTCXX	= g++$(GCC_VERSION)
+HOSTCC	= gcc
+HOSTCXX	= g++
 endif
 ###malaka
 KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS) $(HOSTCFLAGS) -O3 -ffast-math -pipe -fPIE -march=native -mtune=native \
@@ -418,17 +418,17 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-CC		= clang$(LLVM_VERSION)
-LD		= ld.lld$(LLVM_VERSION)
-AR		= llvm-ar$(LLVM_VERSION)
-NM		= llvm-nm$(LLVM_VERSION)
+CC		= clang
+LD		= ld.lld
+AR		= llvm-ar
+NM		= llvm-nm
 OBJCOPY		= llvm-objcopy
 OBJDUMP		= llvm-objdump
 READELF		= llvm-readelf
 OBJSIZE		= llvm-size
 STRIP		= llvm-strip
 else
-CC		= $(CROSS_COMPILE)gcc$(GCC_VERSION)
+CC		= $(CROSS_COMPILE)gcc
 LD		= $(CROSS_COMPILE)ld
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
@@ -775,10 +775,13 @@ LLVM_DIS	:= llvm-dis
 ### flags that apply to clang-10 strictly
 #ifeq ($(cc-name),clang-10)
 
+LDFLAGS	+= --plugin-opt=O3
+
 ### polly on clang-11 is not officially supported yet
 ### there is a workaround in the script for toolchain installation
 ### to copy the polly libraries to their location for clang-11
 ### do not change this unless you know what you are doing
+LDFLAGS	+= -plugin LLVMPolly.so
 polly=/usr/lib/llvm-11/lib/LLVMPolly.so
 KBUILD_CFLAGS	+= -Xclang -load -Xclang $(polly) \
 			 -mllvm -polly \
@@ -807,14 +810,14 @@ KBUILD_CFLAGS	+= -Xclang -load -Xclang $(polly) \
 #endif
 
 ### GCC SETUP - flags that apply to gcc only
-ifeq ($(cc-name),gcc$(GCC_VERSION))
-KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
+#ifeq ($(cc-name),gcc
+#KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
 
 ###ldgold
-LDFLAGS	+= -plugin LLVMgold.so
-KBUILD_CFLAGS	+= -fuse-ld=gold
+#LDFLAGS	+= -plugin LLVMgold.so
+#KBUILD_CFLAGS	+= -fuse-ld=gold
 #else
-endif
+#endif
 
 #####################################################################################
 #####################################################################################

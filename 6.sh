@@ -36,7 +36,7 @@ export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
 export PATH=""$path2":$PATH"
 #CLANG="CC=$path/clang
 #        HOSTCC=$path/clang"
-#LD="LD=$path2/ld.lld"
+LD="LD=$path/ld.gold"
 make $CLANG $LD menuconfig
 cp .config $defconfig
 
