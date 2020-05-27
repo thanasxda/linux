@@ -14,6 +14,8 @@ sleep 10
 
 #### extras
 echo fq_codel > /proc/sys/net/core/default_qdisc
+sysctl net.ipv4.tcp_fastopen=3
+sysctl net.core.busy_read=50
 
 ###### CONFIGURE SCHEDULER
 ################################
