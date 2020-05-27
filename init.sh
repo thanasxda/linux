@@ -13,6 +13,8 @@
 sleep 10
 
 #### extras
+echo 1 > /proc/sys/vm/overcommit_memory
+/etc/init.d/irqbalance start
 echo fq_codel > /proc/sys/net/core/default_qdisc
 sysctl net.ipv4.tcp_fastopen=3
 sysctl net.core.busy_read=50
@@ -33,10 +35,10 @@ echo "0" > /sys/block/$sd/queue/add_random
 echo "0" > /sys/block/$sd/queue/iostats
 echo "0" > /sys/block/$sd/queue/io_poll
 echo "0" > /sys/block/$sd/queue/nomerges
-echo "4096" > /sys/block/$sd/queue/nr_requests
+echo "512" > /sys/block/$sd/queue/nr_requests
 echo "4096" > /sys/block/$sd/queue/read_ahead_kb
 echo "0" > /sys/block/$sd/queue/rotational
-echo "1" > /sys/block/$sd/queue/rq_affinity
+echo "2" > /sys/block/$sd/queue/rq_affinity
 echo "write through" > /sys/block/$sd/queue/write_cache
 echo "4" > /sys/block/$sd/queue/iosched/quantum
 echo "80" > /sys/block/$sd/queue/iosched/fifo_expire_sync
@@ -60,10 +62,10 @@ echo "0" > /sys/block/$nvme/queue/add_random
 echo "0" > /sys/block/$nvme/queue/iostats
 echo "0" > /sys/block/$nvme/queue/io_poll
 echo "0" > /sys/block/$nvme/queue/nomerges
-echo "4096" > /sys/block/$nvme/queue/nr_requests
+echo "512" > /sys/block/$nvme/queue/nr_requests
 echo "4096" > /sys/block/$nvme/queue/read_ahead_kb
 echo "0" > /sys/block/$nvme/queue/rotational
-echo "1" > /sys/block/$nvme/queue/rq_affinity
+echo "2" > /sys/block/$nvme/queue/rq_affinity
 echo "write through" > /sys/block/$nvme/queue/write_cache
 echo "4" > /sys/block/$nvme/queue/iosched/quantum
 echo "80" > /sys/block/$nvme/queue/iosched/fifo_expire_sync
@@ -83,9 +85,9 @@ echo "150" > /sys/block/$nvme/queue/iosched/target_latency
 echo "0" > /proc/sys/fs/dir-notify-enable
 echo "20" > /proc/sys/fs/lease-break-time
 echo "1" > /proc/sys/vm/compact_unevictable_allowed
-echo "15" > /proc/sys/vm/dirty_background_ratio
-echo "500" > /proc/sys/vm/dirty_expire_centisecs
-echo "60" > /proc/sys/vm/dirty_ratio
+echo "5" > /proc/sys/vm/dirty_background_ratio
+echo "12000" > /proc/sys/vm/dirty_expire_centisecs
+echo "80" > /proc/sys/vm/dirty_ratio
 echo "3000" > /proc/sys/vm/dirty_writeback_centisecs
 echo "1" > /proc/sys/vm/oom_dump_tasks
 echo "1" > /proc/sys/vm/oom_kill_allocating_task
@@ -93,6 +95,55 @@ echo "1200" > /proc/sys/vm/stat_interval
 echo "10" > /proc/sys/vm/vfs_cache_pressure
 echo "90" > /proc/sys/vm/swappiness
 sysctl vm.swappiness=90
+sysctl vm.dirty_ratio=80
+sysctl vm.dirty_background_ratio=5
+sysctl vm.dirty_expire_centisecs=12000
+sysctl vm.watermark_scale_factor=200
+### IMPROVE SYSTEM MEMORY MANAGEMENT ###
+# Increase size of file handles and inode cache
+sysctl fs.file-max=2097152
+### GENERAL NETWORK SECURITY OPTIONS ###
+# Number of times SYNACKs for passive TCP connection.
+sysctl net.ipv4.tcp_synack_retries=2
+# Allowed local port range
+sysctl net.ipv4.ip_local_port_range=2000 65535
+# Protect Against TCP Time-Wait
+sysctl net.ipv4.tcp_rfc1337=1
+# Decrease the time default value for tcp_fin_timeout connection
+sysctl net.ipv4.tcp_fin_timeout=15
+# Decrease the time default value for connections to keep alive
+sysctl net.ipv4.tcp_keepalive_time=300
+sysctl net.ipv4.tcp_keepalive_probes=5
+sysctl net.ipv4.tcp_keepalive_intvl=15
+### TUNING NETWORK PERFORMANCE ###
+# Default Socket Receive Buffer
+sysctl net.core.rmem_default=31457280
+# Maximum Socket Receive Buffer
+sysctl net.core.rmem_max=12582912
+# Default Socket Send Buffer
+sysctl net.core.wmem_default=31457280
+# Maximum Socket Send Buffer
+sysctl net.core.wmem_max=12582912
+# Increase number of incoming connections
+sysctl net.core.somaxconn=4096
+# Increase number of incoming connections backlog
+sysctl net.core.netdev_max_backlog=65536
+# Increase the maximum amount of option memory buffers
+sysctl net.core.optmem_max=25165824
+# Increase the maximum total buffer-space allocatable
+# This is measured in units of pages (4096 bytes)
+sysctl net.ipv4.tcp_mem=65536 131072 262144
+sysctl net.ipv4.udp_mem=65536 131072 262144
+# Increase the read-buffer space allocatable
+sysctl net.ipv4.tcp_rmem=8192 87380 16777216
+sysctl net.ipv4.udp_rmem_min=16384
+# Increase the write-buffer-space allocatable
+sysctl net.ipv4.tcp_wmem=8192 65536 16777216
+sysctl net.ipv4.udp_wmem_min=16384
+# Increase the tcp-time-wait buckets pool size to prevent simple DOS attacks
+sysctl net.ipv4.tcp_max_tw_buckets=1440000
+sysctl net.ipv4.tcp_tw_recycle=1
+sysctl net.ipv4.tcp_tw_reuse=1
 
 ###### CPU
 ################################
@@ -156,6 +207,17 @@ echo "0" > /proc/sys/net/ipv4/net.ipv4.ip_no_pmtu_disc
 echo "1" > /proc/sys/net/ipv4/net.ipv4.tcp_mtu_probing
 echo "2" > /proc/sys/net/ipv4/net.ipv4.tcp_frto
 echo "2" > /proc/sys/net/ipv4/net.ipv4.tcp_frto_response
+
+sysctl net.core.somaxconn=1000
+sysctl net.core.netdev_max_backlog=5000
+sysctl net.core.rmem_max=16777216
+sysctl net.core.wmem_max=16777216
+sysctl net.ipv4.tcp_wmem=4096 12582912 16777216
+sysctl net.ipv4.tcp_rmem=4096 12582912 16777216
+sysctl net.ipv4.tcp_max_syn_backlog=8096
+sysctl net.ipv4.tcp_slow_start_after_idle=0
+sysctl net.ipv4.tcp_tw_reuse=1
+sysctl net.ipv4.ip_local_port_range=10240 65535
 
 for i in $(find /sys/class/net -type l); do
   echo "128" > $i/tx_queue_len;
