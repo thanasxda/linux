@@ -30,6 +30,16 @@ echo 2000000 > /proc/sys/kernel/sched_wakeup_granularity_ns
 #echo 980000 > /proc/sys/kernel/sched_rt_runtime_us
 echo 40000 > /proc/sys/kernel/sched_latency_ns
 
+sysctl -w kernel.sched_scaling_enable=1
+echo 1 > /proc/sys/kernel/sched_scaling_enable
+echo 2 > /proc/sys/kernel/sched_tunable_scaling
+#echo 0 > /proc/sys/kernel/sched_boost
+echo 1 > /proc/sys/kernel/sched_child_runs_first
+echo 1000000 > /proc/sys/kernel/sched_min_granularity_ns
+echo 2000000 > /proc/sys/kernel/sched_wakeup_granularity_ns
+#echo 980000 > /proc/sys/kernel/sched_rt_runtime_us
+echo 40000 > /proc/sys/kernel/sched_latency_ns
+
 ###### CONFIGURE SCHEDULER
 ################################
 ### currently [none], [kyber], [bfq], [mq-deadline]
