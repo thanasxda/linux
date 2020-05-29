@@ -409,7 +409,7 @@ endif
 ###malaka
 KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS) $(HOSTCFLAGS) -O3 -ffast-math -pipe -fPIE -march=native -mtune=native \
 --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -Wformat-security -fno-semantic-interposition \
--fno-signed-zeros -fno-strict-aliasing -fno-trapping-math -m64 -pthread -Wformat-security -fno-stack-protector -fwrapv -funroll-loops -ftree-vectorize -fforce-addr -mabi=native
+-fno-signed-zeros -fno-strict-aliasing -fno-trapping-math -m64 -pthread -Wformat-security -fno-stack-protector -fwrapv -funroll-loops -ftree-vectorize -fforce-addr
 
 KBUILD_HOSTCXXFLAGS := -Wall -O3 -ffast-math $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
 KBUILD_HOSTLDFLAGS  := -O3 -fuse-ld=lld  $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
@@ -810,13 +810,14 @@ KBUILD_CFLAGS	+= -Xclang -load -Xclang $(polly) \
 #endif
 
 ### GCC SETUP - flags that apply to gcc only
-#ifeq ($(cc-name),gcc
+#ifeq ($(cc-name),gcc)
 #KBUILD_CFLAGS += -floop-parallelize-all -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -floop-optimize -floop-nest-optimize -fprefetch-loop-arrays -ftree-loop-vectorize -Wno-maybe-uninitialized
 
 ###ldgold
 #LDFLAGS	+= -plugin LLVMgold.so
 #KBUILD_CFLAGS	+= -fuse-ld=gold
 #else
+..
 #endif
 
 #####################################################################################
