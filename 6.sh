@@ -29,15 +29,15 @@ cp $defconfig .config
 ### compiler used CC=clang - as to show up correctly
 #make CC=clang xconfig
 ### getting issues on other distros, for now using failsafe methods. normally not needed.
-path=/usr/bin
-path2=/usr/lib/llvm-11/bin
-xpath=~/TOOLCHAIN/clang/bin
-export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
-export PATH=""$path2":$PATH"
+#path=/usr/bin
+#path2=/usr/lib/llvm-11/bin
+#xpath=~/TOOLCHAIN/clang/bin
+#export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
+#export PATH=""$path2":$PATH"
 #CLANG="CC=$path/clang
 #        HOSTCC=$path/clang"
-LD="LD=$path/ld.gold"
-make $CLANG $LD menuconfig
+#LD="LD=$path/ld.lld"
+sudo make $CLANG $LD menuconfig
 cp .config $defconfig
 
 ###### COMPLETION
