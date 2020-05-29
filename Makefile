@@ -817,7 +817,7 @@ KBUILD_CFLAGS	+= -Xclang -load -Xclang $(polly) \
 #LDFLAGS	+= -plugin LLVMgold.so
 #KBUILD_CFLAGS	+= -fuse-ld=gold
 #else
-..
+#..
 #endif
 
 #####################################################################################
