@@ -37,7 +37,7 @@
 *.o.*
 *.patch
 *.s
-*.so
+v*.so
 *.so.dbg
 *.su
 *.symtypes

@@ -20,7 +20,7 @@ echo "Adding support for clang-11 polly..."
 echo ""
 polly=/usr/lib/llvm-11/lib
 sudo mkdir -p $polly
-sudo \cp -rf $source/THANAS/LLVMPolly.so $polly/
+sudo \cp -rf $source/LLVMPolly.so $polly/
 echo "done!"
 echo -e "${restore}"
 
