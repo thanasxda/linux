@@ -123,23 +123,8 @@ sudo mkinitramfs -ko initrd.img-$KERNELVERSION $KERNELVERSION
 
 ###### SETTING UP SYSTEM CONFIGURATION
 ### set up init.sh for kernel configuration
-echo -e "${yellow}"
-echo "setting up userspace kernel configuration & system optimizations"
-echo "on root filesystem /init.sh can be found, adjust it to your needs"
-echo "these will be removed once the uninstall script has been executed"
-echo -e "${restore}"
 cd $source
-chmod +x init.sh
-sudo \cp init.sh /init.sh
-if grep -q "@reboot root /init.sh" /etc/crontab
-then
-echo "Flag exists"
-else
-sudo sed -i "\$a@reboot root /init.sh" /etc/crontab
-fi
-### switch off mitigations improving linux performance
-cd $source
-./mitigations.sh
+./extras.sh
 
 ###### COMPLETION
 echo ...

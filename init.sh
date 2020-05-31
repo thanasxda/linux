@@ -20,13 +20,18 @@ echo fq_codel > /proc/sys/net/core/default_qdisc
 #sysctl net.core.busy_read=50
 sysctl net.ipv4.tcp_slow_start_after_idle=0
 
+echo "1" /proc/sys/fs/leases-enable
+echo "0" > /proc/sys/fs/dir-notify-enable
+echo "20" > /proc/sys/fs/lease-break-time
+echo "1" > /proc/sys/vm/overcommit_memory
+
 sysctl -w kernel.sched_scaling_enable=1
 sysctl sched_scaling_enable=1
 sysctl sched_tunable_scaling=2
 sysctl /proc/sys/kernel/sched_child_runs_first=1
-sysctrl /proc/sys/kernel/sched_min_granularity_ns=1000000
-sysctrl /proc/sys/kernel/sched_wakeup_granularity_ns=2000000
-sysctrl /proc/sys/kernel/sched_latency_ns=40000
+sysctl /proc/sys/kernel/sched_min_granularity_ns=1000000
+sysctl /proc/sys/kernel/sched_wakeup_granularity_ns=2000000
+sysctl /proc/sys/kernel/sched_latency_ns=40000
 
 ###### CONFIGURE SCHEDULER
 ################################
@@ -37,7 +42,7 @@ for i in $(find /sys/block -type l); do
   echo "0" > $i/queue/add_random;
   echo "0" > $i/queue/iostats;
   echo "0" > $i/queue/io_poll
-  echo "0" > $i/queue/nomerges
+  echo "2" > $i/queue/nomerges
   echo "512" > $i/queue/nr_requests
   echo "4096" > $i/queue/read_ahead_kb
   echo "0" > $i/queue/rotational
@@ -207,6 +212,7 @@ echo "0 0 0 0" > /proc/sys/kernel/printk
 
 echo "Y" > /sys/module/printk/parameters/console_suspend
 
+
 for i in $(find /sys/ -name debug_mask); do
 echo "0" > $i;
 done
@@ -231,6 +237,7 @@ done
 if [ -e /sys/module/logger/parameters/log_mode ]; then
  echo "2" > /sys/module/logger/parameters/log_mode
 fi;
+
 
 ###### SCHEDULE FSTRIM ONCE WEEKLY
 ################################
