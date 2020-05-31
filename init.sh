@@ -16,29 +16,17 @@ sleep 10
 echo 1 > /proc/sys/vm/overcommit_memory
 /etc/init.d/irqbalance start
 echo fq_codel > /proc/sys/net/core/default_qdisc
-sysctl net.ipv4.tcp_fastopen=3
-sysctl net.core.busy_read=50
+#sysctl net.ipv4.tcp_fastopen=3
+#sysctl net.core.busy_read=50
 sysctl net.ipv4.tcp_slow_start_after_idle=0
 
 sysctl -w kernel.sched_scaling_enable=1
-echo 1 > /proc/sys/kernel/sched_scaling_enable
-echo 2 > /proc/sys/kernel/sched_tunable_scaling
-#echo 0 > /proc/sys/kernel/sched_boost
-echo 1 > /proc/sys/kernel/sched_child_runs_first
-echo 1000000 > /proc/sys/kernel/sched_min_granularity_ns
-echo 2000000 > /proc/sys/kernel/sched_wakeup_granularity_ns
-#echo 980000 > /proc/sys/kernel/sched_rt_runtime_us
-echo 40000 > /proc/sys/kernel/sched_latency_ns
-
-sysctl -w kernel.sched_scaling_enable=1
-echo 1 > /proc/sys/kernel/sched_scaling_enable
-echo 2 > /proc/sys/kernel/sched_tunable_scaling
-#echo 0 > /proc/sys/kernel/sched_boost
-echo 1 > /proc/sys/kernel/sched_child_runs_first
-echo 1000000 > /proc/sys/kernel/sched_min_granularity_ns
-echo 2000000 > /proc/sys/kernel/sched_wakeup_granularity_ns
-#echo 980000 > /proc/sys/kernel/sched_rt_runtime_us
-echo 40000 > /proc/sys/kernel/sched_latency_ns
+sysctl sched_scaling_enable=1
+sysctl sched_tunable_scaling=2
+sysctl /proc/sys/kernel/sched_child_runs_first=1
+sysctrl /proc/sys/kernel/sched_min_granularity_ns=1000000
+sysctrl /proc/sys/kernel/sched_wakeup_granularity_ns=2000000
+sysctrl /proc/sys/kernel/sched_latency_ns=40000
 
 ###### CONFIGURE SCHEDULER
 ################################
@@ -93,11 +81,11 @@ sysctl vm.watermark_scale_factor=200
 sysctl fs.file-max=2097152
 ### GENERAL NETWORK SECURITY OPTIONS ###
 # Number of times SYNACKs for passive TCP connection.
-sysctl net.ipv4.tcp_synack_retries=2
+#sysctl net.ipv4.tcp_synack_retries=2
 # Allowed local port range
 sysctl net.ipv4.ip_local_port_range=2000 65535
 # Protect Against TCP Time-Wait
-sysctl net.ipv4.tcp_rfc1337=1
+#sysctl net.ipv4.tcp_rfc1337=1
 # Decrease the time default value for tcp_fin_timeout connection
 sysctl net.ipv4.tcp_fin_timeout=15
 # Decrease the time default value for connections to keep alive
@@ -106,33 +94,33 @@ sysctl net.ipv4.tcp_keepalive_probes=5
 sysctl net.ipv4.tcp_keepalive_intvl=15
 ### TUNING NETWORK PERFORMANCE ###
 # Default Socket Receive Buffer
-sysctl net.core.rmem_default=31457280
+#sysctl net.core.rmem_default=31457280
 # Maximum Socket Receive Buffer
-sysctl net.core.rmem_max=12582912
+#sysctl net.core.rmem_max=12582912
 # Default Socket Send Buffer
-sysctl net.core.wmem_default=31457280
+#sysctl net.core.wmem_default=31457280
 # Maximum Socket Send Buffer
-sysctl net.core.wmem_max=12582912
+#sysctl net.core.wmem_max=12582912
 # Increase number of incoming connections
-sysctl net.core.somaxconn=4096
+#sysctl net.core.somaxconn=4096
 # Increase number of incoming connections backlog
-sysctl net.core.netdev_max_backlog=65536
+#sysctl net.core.netdev_max_backlog=65536
 # Increase the maximum amount of option memory buffers
-sysctl net.core.optmem_max=25165824
+#sysctl net.core.optmem_max=25165824
 # Increase the maximum total buffer-space allocatable
 # This is measured in units of pages (4096 bytes)
-sysctl net.ipv4.tcp_mem=65536 131072 262144
-sysctl net.ipv4.udp_mem=65536 131072 262144
+#sysctl net.ipv4.tcp_mem=65536 131072 262144
+#sysctl net.ipv4.udp_mem=65536 131072 262144
 # Increase the read-buffer space allocatable
-sysctl net.ipv4.tcp_rmem=8192 87380 16777216
-sysctl net.ipv4.udp_rmem_min=16384
+#sysctl net.ipv4.tcp_rmem=8192 87380 16777216
+#sysctl net.ipv4.udp_rmem_min=16384
 # Increase the write-buffer-space allocatable
-sysctl net.ipv4.tcp_wmem=8192 65536 16777216
-sysctl net.ipv4.udp_wmem_min=16384
+#sysctl net.ipv4.tcp_wmem=8192 65536 16777216
+#sysctl net.ipv4.udp_wmem_min=16384
 # Increase the tcp-time-wait buckets pool size to prevent simple DOS attacks
-sysctl net.ipv4.tcp_max_tw_buckets=1440000
-sysctl net.ipv4.tcp_tw_recycle=1
-sysctl net.ipv4.tcp_tw_reuse=1
+#sysctl net.ipv4.tcp_max_tw_buckets=1440000
+#sysctl net.ipv4.tcp_tw_recycle=1
+#sysctl net.ipv4.tcp_tw_reuse=1
 
 ###### CPU
 ################################
