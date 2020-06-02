@@ -614,10 +614,9 @@ static int blkdev_readpage(struct file * file, struct page * page)
 	return block_read_full_page(page, blkdev_get_block);
 }
 
-static int blkdev_readpages(struct file *file, struct address_space *mapping,
-			struct list_head *pages, unsigned nr_pages)
+static void blkdev_readahead(struct readahead_control *rac)
 {
-	return mpage_readpages(mapping, pages, nr_pages, blkdev_get_block);
+	mpage_readahead(rac, blkdev_get_block);
 }
 
 static int blkdev_write_begin(struct file *file, struct address_space *mapping,
@@ -2023,8 +2022,7 @@ ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (bdev_read_only(I_BDEV(bd_inode)))
 		return -EPERM;
 
-	/* uswsusp needs write permission to the swap */
-	if (IS_SWAPFILE(bd_inode) && !hibernation_available())
+	if (IS_SWAPFILE(bd_inode) && !is_hibernate_resume_dev(bd_inode))
 		return -ETXTBSY;
 
 	if (!iov_iter_count(from))
@@ -2085,7 +2083,7 @@ static int blkdev_writepages(struct address_space *mapping,
 
 static const struct address_space_operations def_blk_aops = {
 	.readpage	= blkdev_readpage,
-	.readpages	= blkdev_readpages,
+	.readahead	= blkdev_readahead,
 	.writepage	= blkdev_writepage,
 	.write_begin	= blkdev_write_begin,
 	.write_end	= blkdev_write_end,
