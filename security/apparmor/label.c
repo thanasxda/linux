@@ -1726,11 +1726,6 @@ void aa_label_xaudit(struct audit_buffer *ab, struct aa_ns *ns,
 		str = (char *) label->hname;
 		len = strlen(str);
 	}
-	if (audit_string_contains_control(str, len))
-		audit_log_n_hex(ab, str, len);
-	else
-		audit_log_n_string(ab, str, len);
-
 	kfree(name);
 }
 
@@ -1781,13 +1776,6 @@ void aa_label_xprintk(struct aa_ns *ns, struct aa_label *label, int flags,
 		pr_info("%s", label->hname);
 }
 
-void aa_label_audit(struct audit_buffer *ab, struct aa_label *label, gfp_t gfp)
-{
-	struct aa_ns *ns = aa_get_current_ns();
-
-	aa_label_xaudit(ab, ns, label, FLAG_VIEW_SUBNS, gfp);
-	aa_put_ns(ns);
-}
 
 void aa_label_seq_print(struct seq_file *f, struct aa_label *label, gfp_t gfp)
 {
