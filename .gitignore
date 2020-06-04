@@ -37,7 +37,7 @@
 *.o.*
 *.patch
 *.s
-*.so
+v*.so
 *.so.dbg
 *.su
 *.symtypes
@@ -147,3 +147,8 @@ x509.genkey
 
 # Clang's compilation database file
 /compile_commands.json
+
+### malakas
+test.sh
+BUILD.sh
+thanas2_defconfig
