@@ -33,6 +33,10 @@ sysctl /proc/sys/kernel/sched_min_granularity_ns=1000000
 sysctl /proc/sys/kernel/sched_wakeup_granularity_ns=2000000
 sysctl /proc/sys/kernel/sched_latency_ns=40000
 
+sudo apparmor_parser -r /etc/apparmor.d/*snap-confine*
+sudo apparmor_parser -r /var/lib/snapd/apparmor/profiles/snap-confine*
+systemctl enable --now apparmor.service
+
 ###### CONFIGURE SCHEDULER
 ################################
 ### currently [none], [kyber], [bfq], [mq-deadline]
