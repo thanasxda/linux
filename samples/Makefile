@@ -8,7 +8,7 @@ subdir-ccflags-y := -O3 -ffast-math -fforce-addr --param=ssp-buffer-size=32 -D_F
 
 
 subdir-$(CONFIG_SAMPLE_AUXDISPLAY)	+= auxdisplay
-obj-$(CONFIG_SAMPLE_ANDROID_BINDERFS)	+= binderfs/
+subdir-$(CONFIG_SAMPLE_ANDROID_BINDERFS) += binderfs
 obj-$(CONFIG_SAMPLE_CONFIGFS)		+= configfs/
 obj-$(CONFIG_SAMPLE_CONNECTOR)		+= connector/
 subdir-$(CONFIG_SAMPLE_HIDRAW)		+= hidraw
@@ -33,3 +33,4 @@ obj-y					+= vfio-mdev/
 subdir-$(CONFIG_SAMPLE_VFS)		+= vfs
 obj-$(CONFIG_SAMPLE_INTEL_MEI)		+= mei/
 subdir-$(CONFIG_SAMPLE_WATCHDOG)	+= watchdog
+subdir-$(CONFIG_SAMPLE_WATCH_QUEUE)	+= watch_queue
