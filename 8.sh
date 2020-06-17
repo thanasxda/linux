@@ -15,14 +15,14 @@ tc=~/TOOLCHAIN/clang
 ###### MANUALLY INSTALL LLVM/CLANG-11 POLLY SUPPORT FOR NOW
 ### do this prior to clang-11 installation so that if support will officially come
 ### it will be overridden by the official latest clang libraries
-echo -e "${yellow}"
-echo "Adding support for clang-11 polly..."
-echo ""
-polly=/usr/lib/llvm-11/lib
-sudo mkdir -p $polly
-sudo \cp -rf $source/LLVMPolly.so $polly/
-echo "done!"
-echo -e "${restore}"
+#echo -e "${yellow}"
+#echo "Adding support for clang-11 polly..."
+#echo ""
+#polly=/usr/lib/llvm-11/lib
+#sudo mkdir -p $polly
+#sudo \cp -rf $source/LLVMPolly.so $polly/
+#echo "done!"
+#echo -e "${restore}"
 
 ###### ADD SOURCES
 echo -e "${yellow}"
@@ -58,6 +58,7 @@ sudo aptitude -f install -y gcc-10
 sudo aptitude -f install -y gcc-multilib
 sudo aptitude -f install -y gcc-10-multilib
 sudo aptitude -f install -y gcc clang binutils make flex bison bc build-essential libncurses-dev libssl-dev libelf-dev qt5-default
+./upgrade.sh
 cd $tc && git pull && cd $source
 sudo apt -f install -y && apt -f --fix-broken install -y apt -f upgrade -y
 
