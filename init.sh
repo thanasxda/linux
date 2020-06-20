@@ -242,6 +242,19 @@ if [ -e /sys/module/logger/parameters/log_mode ]; then
  echo "2" > /sys/module/logger/parameters/log_mode
 fi;
 
+wl -i eth0 interference 3
+wl -i eth1 interference 3
+wl -i eth2 interference 3
+ifconfig eth0 txqueuelen 2
+ifconfig eth1 txqueuelen 2
+ifconfig eth2 txqueuelen 2
+echo 262144 > /proc/sys/net/core/rmem_max
+echo 262144 > /proc/sys/net/core/wmem_max
+echo "4096 16384 262144" > /proc/sys/net/ipv4/tcp_wmem
+echo "4096 87380 262144" > /proc/sys/net/ipv4/tcp_rmem
+echo 1000 > /proc/sys/net/core/netdev_max_backlog
+echo 16384 > /proc/sys/net/ipv4/netfilter/ip_conntrack_max
+echo 16384 > /sys/module/nf_conntrack/parameters/hashsize
 
 ###### SCHEDULE FSTRIM ONCE WEEKLY
 ################################
