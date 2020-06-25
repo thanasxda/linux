@@ -795,7 +795,7 @@ LDFLAGS	+= --plugin-opt=O3
 ### to copy the polly libraries to their location for clang-11
 ### do not change this unless you know what you are doing
 LDFLAGS	+= -plugin LLVMPolly.so
-polly=/usr/lib/llvm-11/bin/LLVMPolly.so
+polly=/usr/lib/llvm-11/lib/LLVMPolly.so
 KBUILD_CFLAGS	+= -Xclang -load -Xclang $(polly) \
 			 -mllvm -polly \
 		   -mllvm -polly-run-dce \
