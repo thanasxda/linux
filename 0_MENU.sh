@@ -113,8 +113,8 @@ o7=$b$i"*CLEAN SOURCE*$c$h
                       only apply when facing compiler errors
                       or if you are concerned with clean builds.
 "$c$a
-o8=$b$i"*INSTALL LATEST LLVM/CLANG COMPILER & WORKAROUND FOR POLLY SUPPORT*$c$h
-                    - as of yet llvm/clang-11 doesn't officially support polly optimizations.
+o8=$b$i"*INSTALL LATEST LLVM/CLANG COMPILER $(echo -e "\e[9m& WORKAROUND FOR POLLY SUPPORT\e[0m")*$c$h
+                    - $(echo -e "\e[9mas of yet llvm/clang-11 doesn't officially support polly optimizations.\e[0m")
                       make sure to run this option at least once to let the script take care of that.
                       ensuring the kernel is compiled with the latest compilers,
                       choose if you have issues. make sure you have the full build environment
