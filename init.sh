@@ -66,6 +66,8 @@ for i in $(find /sys/block -type l); do
   echo "150" > $i/queue/iosched/target_latency
 done;
 
+echo "write through" | sudo tee /sys/block/*/queue/write_cache
+
 ###### FILESYSTEM
 ################################
 echo "0" > /proc/sys/fs/dir-notify-enable
