@@ -25,6 +25,9 @@ echo "0" > /proc/sys/fs/dir-notify-enable
 echo "20" > /proc/sys/fs/lease-break-time
 echo "1" > /proc/sys/vm/overcommit_memory
 
+sudo echo always > /sys/kernel/mm/transparent_hugepage/enabled
+sudo echo always > /sys/kernel/mm/transparent_hugepage/defrag
+
 sysctl -w kernel.sched_scaling_enable=1
 sysctl sched_scaling_enable=1
 sysctl sched_tunable_scaling=2
