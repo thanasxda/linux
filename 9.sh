@@ -25,7 +25,7 @@ RC_KERNEL="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"-rc*
 ### for deletion of a specific version or older than current version
 ### input kernelname into one of the "manual='name_here*'" underneath
 ### note that the usage of * will remove any kernel starting with that name
-manual=5.7.0-rc*
+manual=5.8.0-rc*
 
 echo -e "${magenta}"
 echo REMOVING ALL INSTALLED RELEASE CANDIDATE WITH VESIONING $RC_KERNEL KERNELS FOUND ON THE SYSTEM VERSIONS!
