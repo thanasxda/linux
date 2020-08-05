@@ -464,7 +464,8 @@ static int nvme_tcp_process_nvme_cqe(struct nvme_tcp_queue *queue,
 		return -EINVAL;
 	}
 
-	nvme_end_request(rq, cqe->status, cqe->result);
+	if (!nvme_end_request(rq, cqe->status, cqe->result))
+		nvme_complete_rq(rq);
 	queue->nr_cqe++;
 
 	return 0;
@@ -654,7 +655,8 @@ static inline void nvme_tcp_end_request(struct request *rq, u16 status)
 {
 	union nvme_result res = {};
 
-	nvme_end_request(rq, cpu_to_le16(status << 1), res);
+	if (!nvme_end_request(rq, cpu_to_le16(status << 1), res))
+		nvme_complete_rq(rq);
 }
 
 static int nvme_tcp_recv_data(struct nvme_tcp_queue *queue, struct sk_buff *skb,
@@ -1381,6 +1383,9 @@ static int nvme_tcp_alloc_queue(struct nvme_ctrl *nctrl,
 	/* Set socket type of service */
 	if (nctrl->opts->tos >= 0)
 		ip_sock_set_tos(queue->sock->sk, nctrl->opts->tos);
+
+	/* Set 10 seconds timeout for icresp recvmsg */
+	queue->sock->sk->sk_rcvtimeo = 10 * HZ;
 
 	queue->sock->sk->sk_allocation = GFP_ATOMIC;
 	nvme_tcp_set_queue_io_cpu(queue);
