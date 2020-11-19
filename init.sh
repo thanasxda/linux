@@ -12,6 +12,9 @@
 #### add delay prior to application
 sleep 10
 
+systemctl start firewalld
+
+
 #### extras
 echo 1 > /proc/sys/vm/overcommit_memory
 /etc/init.d/irqbalance start

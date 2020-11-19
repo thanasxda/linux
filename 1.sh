@@ -70,17 +70,17 @@ export PATH=""$path2":$PATH"
 #        LD=$xpath/ld.lld"
 
 ### set to system compiler
-CLANG="CC=clang-11
-        HOSTCC=clang-11
-        AR=llvm-ar-11
-        NM=llvm-nm-11
+CLANG="CC=clang
+        HOSTCC=clang
+        AR=llvm-ar
+        NM=llvm-nm
         OBJCOPY=llvm-objcopy
         OBJDUMP=llvm-objdump
         READELF=llvm-readelf
         OBJSIZE=llvm-size
         STRIP=llvm-strip"
 ### optionally set linker seperately
-LD="LD=ld.lld-11"
+LD="LD=ld.lld"
 ### enable verbose output for debugging
 #VERBOSE="V=1"
 ### ensure all cpu threads are used for compilation

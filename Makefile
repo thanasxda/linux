@@ -798,9 +798,8 @@ LDFLAGS	+= --plugin-opt=O3
 ### to copy the polly libraries to their location for clang-11
 ### do not change this unless you know what you are doing
 LDFLAGS	+= -plugin LLVMPolly.so
-polly=/usr/lib/llvm-11/lib/LLVMPolly.so
-KBUILD_CFLAGS	+= -Xclang -load -Xclang $(polly) \
-			 -mllvm -polly \
+polly=/usr/lib/llvm-12/lib/LLVMPolly.so
+KBUILD_CFLAGS	+=			 -mllvm -polly \
 		   -mllvm -polly-run-dce \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-opt-fusion=max \
@@ -815,7 +814,7 @@ KBUILD_CFLAGS	+= -Xclang -load -Xclang $(polly) \
 		   -mllvm -polly-rtc-max-arrays-per-group=40 \
 			 -mllvm -polly-parallel \
 
-
+# -Xclang -load -Xclang $(polly) \
 #			 -mllvm -polly-invariant-load-hoisting \
 			 -mllvm -polly-detect-keep-going \
 			 -mllvm -polly-vectorizer=polly \
