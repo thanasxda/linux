@@ -99,8 +99,6 @@ static void reuseport_array_free(struct bpf_map *map)
 	struct sock *sk;
 	u32 i;
 
-	synchronize_rcu();
-
 	/*
 	 * ops->map_*_elem() will not be able to access this
 	 * array now. Hence, this function only races with
@@ -193,7 +191,7 @@ int bpf_fd_reuseport_array_lookup_elem(struct bpf_map *map, void *key,
 	rcu_read_lock();
 	sk = reuseport_array_lookup_elem(map, key);
 	if (sk) {
-		*(u64 *)value = sock_gen_cookie(sk);
+		*(u64 *)value = __sock_gen_cookie(sk);
 		err = 0;
 	} else {
 		err = -ENOENT;
@@ -351,11 +349,15 @@ static int reuseport_array_get_next_key(struct bpf_map *map, void *key,
 	return 0;
 }
 
+static int reuseport_array_map_btf_id;
 const struct bpf_map_ops reuseport_array_ops = {
+	.map_meta_equal = bpf_map_meta_equal,
 	.map_alloc_check = reuseport_array_alloc_check,
 	.map_alloc = reuseport_array_alloc,
 	.map_free = reuseport_array_free,
 	.map_lookup_elem = reuseport_array_lookup_elem,
 	.map_get_next_key = reuseport_array_get_next_key,
 	.map_delete_elem = reuseport_array_delete_elem,
+	.map_btf_name = "reuseport_array",
+	.map_btf_id = &reuseport_array_map_btf_id,
 };

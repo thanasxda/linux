@@ -735,7 +735,7 @@ zone_found:
 	 */
 
 	/*
-	 * If the zone we wish to scan is the the current zone and the
+	 * If the zone we wish to scan is the current zone and the
 	 * pfn falls into the current node then we do not need to walk
 	 * the tree.
 	 */
@@ -1663,7 +1663,7 @@ static unsigned long minimum_image_size(unsigned long saveable)
 {
 	unsigned long size;
 
-	size = global_node_page_state(NR_SLAB_RECLAIMABLE)
+	size = global_node_page_state_pages(NR_SLAB_RECLAIMABLE_B)
 		+ global_node_page_state(NR_ACTIVE_ANON)
 		+ global_node_page_state(NR_INACTIVE_ANON)
 		+ global_node_page_state(NR_ACTIVE_FILE)

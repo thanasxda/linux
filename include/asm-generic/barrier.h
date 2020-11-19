@@ -13,6 +13,7 @@
 
 #ifndef __ASSEMBLY__
 
+#include <linux/compiler.h>
 #include <asm/rwonce.h>
 
 #ifndef nop
@@ -238,6 +239,16 @@ do {									\
 	smp_acquire__after_ctrl_dep();				\
 	(typeof(*ptr))_val;					\
 })
+#endif
+
+/*
+ * pmem_wmb() ensures that all stores for which the modification
+ * are written to persistent storage by preceding instructions have
+ * updated persistent storage before any data  access or data transfer
+ * caused by subsequent instructions is initiated.
+ */
+#ifndef pmem_wmb
+#define pmem_wmb()	wmb()
 #endif
 
 #endif /* !__ASSEMBLY__ */

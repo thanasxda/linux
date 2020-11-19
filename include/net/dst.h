@@ -214,7 +214,7 @@ dst_allfrag(const struct dst_entry *dst)
 static inline int
 dst_metric_locked(const struct dst_entry *dst, int metric)
 {
-	return dst_metric(dst, RTAX_LOCK) & (1<<metric);
+	return dst_metric(dst, RTAX_LOCK) & (1 << metric);
 }
 
 static inline void dst_hold(struct dst_entry *dst)
@@ -533,16 +533,6 @@ static inline void skb_dst_update_pmtu_no_confirm(struct sk_buff *skb, u32 mtu)
 
 	if (dst && dst->ops->update_pmtu)
 		dst->ops->update_pmtu(dst, NULL, skb, mtu, false);
-}
-
-static inline void skb_tunnel_check_pmtu(struct sk_buff *skb,
-					 struct dst_entry *encap_dst,
-					 int headroom)
-{
-	u32 encap_mtu = dst_mtu(encap_dst);
-
-	if (skb->len > encap_mtu - headroom)
-		skb_dst_update_pmtu_no_confirm(skb, encap_mtu - headroom);
 }
 
 #endif /* _NET_DST_H */

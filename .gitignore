@@ -157,3 +157,6 @@ x509.genkey
 test.sh
 BUILD.sh
 thanas2_defconfig
+
+# Documentation toolchain
+sphinx_*/

@@ -436,8 +436,6 @@ static int torture_rtmutex_lock(void) __acquires(torture_rtmutex)
 
 static void torture_rtmutex_boost(struct torture_random_state *trsp)
 {
-	int policy;
-	struct sched_param param;
 	const unsigned int factor = 50000; /* yes, quite arbitrary */
 
 	if (!rt_task(current)) {
@@ -448,8 +446,7 @@ static void torture_rtmutex_boost(struct torture_random_state *trsp)
 		 */
 		if (trsp && !(torture_random(trsp) %
 			      (cxt.nrealwriters_stress * factor))) {
-			policy = SCHED_FIFO;
-			param.sched_priority = MAX_RT_PRIO - 1;
+			sched_set_fifo(current);
 		} else /* common case, do nothing */
 			return;
 	} else {
@@ -462,13 +459,10 @@ static void torture_rtmutex_boost(struct torture_random_state *trsp)
 		 */
 		if (!trsp || !(torture_random(trsp) %
 			       (cxt.nrealwriters_stress * factor * 2))) {
-			policy = SCHED_NORMAL;
-			param.sched_priority = 0;
+			sched_set_normal(current, 0);
 		} else /* common case, do nothing */
 			return;
 	}
-
-	sched_setscheduler_nocheck(current, policy, &param);
 }
 
 static void torture_rtmutex_delay(struct torture_random_state *trsp)
@@ -572,7 +566,7 @@ static struct lock_torture_ops rwsem_lock_ops = {
 #include <linux/percpu-rwsem.h>
 static struct percpu_rw_semaphore pcpu_rwsem;
 
-void torture_percpu_rwsem_init(void)
+static void torture_percpu_rwsem_init(void)
 {
 	BUG_ON(percpu_init_rwsem(&pcpu_rwsem));
 }

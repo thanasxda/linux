@@ -154,15 +154,6 @@ unsigned long get_wchan(struct task_struct *p)
 }
 
 /*
- * Required placeholder.
- */
-int dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpu)
-{
-	return 0;
-}
-
-
-/*
  * Called on the exit path of event entry; see vm_entry.S
  *
  * Interrupts will already be disabled.
@@ -189,7 +180,6 @@ int do_work_pending(struct pt_regs *regs, u32 thread_info_flags)
 	}
 
 	if (thread_info_flags & _TIF_NOTIFY_RESUME) {
-		clear_thread_flag(TIF_NOTIFY_RESUME);
 		tracehook_notify_resume(regs);
 		return 1;
 	}
