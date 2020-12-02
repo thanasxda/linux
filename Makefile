@@ -811,14 +811,13 @@ KBUILD_CFLAGS	+=			 -mllvm -polly \
 		   -mllvm -polly-opt-simplify-deps=no \
 		   -mllvm -polly-rtc-max-arrays-per-group=40 \
 			 -mllvm -polly-parallel \
-			 -mllvm -polly-invariant-load-hoisting \
+
+# -Xclang -load -Xclang $(polly) \
+#			 -mllvm -polly-invariant-load-hoisting \
 			 -mllvm -polly-detect-keep-going \
 			 -mllvm -polly-vectorizer=polly \
 			 -mllvm -polly-vectorizer=stripmine \
 			 -mllvm -polly-parallel-force \
-
- # -Xclang -load -Xclang $(polly) \
-
 
 
 #endif
