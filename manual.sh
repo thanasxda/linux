@@ -8,8 +8,8 @@ yellow="\033[1;93m"
 magenta="\033[05;1;95m"
 restore="\033[0m"
 
-manual=5.7.0-thanas+.old*
-manual2=5.8.0-rc1-thanas+.old*
+manual=*old*
+manual2=*thanas*
 
 ###### KERNEL REMOVAL
 sudo rm -rf /boot/vmlinuz-$manual
@@ -32,9 +32,9 @@ sudo rm -rf /var/lib/initramfs/$manual2/
 sudo rm -rf /var/lib/initramfs-tools/$manual2
 
 ###### SYSTEM OPTIMIZATION REVERSAL TO STOCK
-sudo sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/c\GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' /etc/default/grub
+#sudo sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/c\GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' /etc/default/grub
 sudo update-grub2
-GRUB_PATH=$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
-sudo grub-install $GRUB_PATH
+#GRUB_PATH=$(sudo fdisk -l | grep '^/dev/[a-z]*[0-9]' | awk '$2 == "*"' | cut -d" " -f1 | cut -c1-8)
+#sudo grub-install $GRUB_PATH
 
 ###### END
