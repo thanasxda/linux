@@ -799,19 +799,20 @@ LDFLAGS	+= --plugin-opt=O3
 LDFLAGS	+= -plugin LLVMPolly.so
 polly=/usr/lib/llvm-12/lib/LLVMPolly.so
 KBUILD_CFLAGS	+=			 -mllvm -polly \
-		   -mllvm -polly-run-dce \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-opt-fusion=max \
 			 -mllvm -polly-omp-backend=LLVM \
 		   -mllvm -polly-scheduling=dynamic \
 			 -mllvm -polly-scheduling-chunksize=1 \
 		   -mllvm -polly-opt-maximize-bands=yes \
-		   -mllvm -polly-position=after-loopopt \
 			 -mllvm -polly-ast-detect-parallel \
 		   -mllvm -polly-ast-use-context \
 		   -mllvm -polly-opt-simplify-deps=no \
 		   -mllvm -polly-rtc-max-arrays-per-group=40 \
 			 -mllvm -polly-parallel \
+
+			 #-mllvm -polly-position=after-loopopt \
+			  -mllvm -polly-run-dce \
 
 # -Xclang -load -Xclang $(polly) \
 #			 -mllvm -polly-invariant-load-hoisting \
