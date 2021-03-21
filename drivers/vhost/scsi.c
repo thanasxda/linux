@@ -1643,7 +1643,8 @@ vhost_scsi_set_endpoint(struct vhost_scsi *vs,
 			if (!vhost_vq_is_setup(vq))
 				continue;
 
-			if (vhost_scsi_setup_vq_cmds(vq, vq->num))
+			ret = vhost_scsi_setup_vq_cmds(vq, vq->num);
+			if (ret)
 				goto destroy_vq_cmds;
 		}
 
@@ -1813,12 +1814,9 @@ static int vhost_scsi_open(struct inode *inode, struct file *f)
 	struct vhost_virtqueue **vqs;
 	int r = -ENOMEM, i;
 
-	vs = kzalloc(sizeof(*vs), GFP_KERNEL | __GFP_NOWARN | __GFP_RETRY_MAYFAIL);
-	if (!vs) {
-		vs = vzalloc(sizeof(*vs));
-		if (!vs)
-			goto err_vs;
-	}
+	vs = kvzalloc(sizeof(*vs), GFP_KERNEL);
+	if (!vs)
+		goto err_vs;
 
 	vqs = kmalloc_array(VHOST_SCSI_MAX_VQ, sizeof(*vqs), GFP_KERNEL);
 	if (!vqs)

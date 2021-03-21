@@ -26,6 +26,8 @@
 #include <linux/tick.h>
 #include <linux/irq.h>
 
+#include <asm/softirq_stack.h>
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/irq.h>
 
@@ -186,7 +188,7 @@ void __local_bh_enable_ip(unsigned long ip, unsigned int cnt)
 	 * Keep preemption disabled until we are done with
 	 * softirq processing:
 	 */
-	preempt_count_sub(cnt - 1);
+	__preempt_count_sub(cnt - 1);
 
 	if (unlikely(!in_interrupt() && local_softirq_pending())) {
 		/*

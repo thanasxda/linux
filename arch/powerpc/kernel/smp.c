@@ -34,6 +34,7 @@
 #include <linux/random.h>
 #include <linux/stackprotector.h>
 #include <linux/pgtable.h>
+#include <linux/clockchips.h>
 
 #include <asm/ptrace.h>
 #include <linux/atomic.h>
@@ -576,7 +577,7 @@ void tick_broadcast(const struct cpumask *mask)
 #endif
 
 #ifdef CONFIG_DEBUGGER
-void debugger_ipi_callback(struct pt_regs *regs)
+static void debugger_ipi_callback(struct pt_regs *regs)
 {
 	debugger_ipi(regs);
 }
@@ -990,7 +991,7 @@ static struct sched_domain_topology_level powerpc_topology[] = {
 	{ NULL, },
 };
 
-static int init_big_cores(void)
+static int __init init_big_cores(void)
 {
 	int cpu;
 

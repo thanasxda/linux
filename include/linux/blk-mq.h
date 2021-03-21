@@ -140,10 +140,6 @@ struct blk_mq_hw_ctx {
 	 * shared across request queues.
 	 */
 	atomic_t		nr_active;
-	/**
-	 * @elevator_queued: Number of queued requests on hctx.
-	 */
-	atomic_t                elevator_queued;
 
 	/** @cpuhp_online: List to store request if CPU is going to die */
 	struct hlist_node	cpuhp_online;
@@ -447,8 +443,8 @@ enum {
 	BLK_MQ_REQ_NOWAIT	= (__force blk_mq_req_flags_t)(1 << 0),
 	/* allocate from reserved pool */
 	BLK_MQ_REQ_RESERVED	= (__force blk_mq_req_flags_t)(1 << 1),
-	/* set RQF_PREEMPT */
-	BLK_MQ_REQ_PREEMPT	= (__force blk_mq_req_flags_t)(1 << 3),
+	/* set RQF_PM */
+	BLK_MQ_REQ_PM		= (__force blk_mq_req_flags_t)(1 << 2),
 };
 
 struct request *blk_mq_alloc_request(struct request_queue *q, unsigned int op,
@@ -492,6 +488,18 @@ static inline int blk_mq_request_started(struct request *rq)
 static inline int blk_mq_request_completed(struct request *rq)
 {
 	return blk_mq_rq_state(rq) == MQ_RQ_COMPLETE;
+}
+
+/*
+ * 
+ * Set the state to complete when completing a request from inside ->queue_rq.
+ * This is used by drivers that want to ensure special complete actions that
+ * need access to the request are called on failure, e.g. by nvme for
+ * multipathing.
+ */
+static inline void blk_mq_set_request_complete(struct request *rq)
+{
+	WRITE_ONCE(rq->state, MQ_RQ_COMPLETE);
 }
 
 void blk_mq_start_request(struct request *rq);
@@ -602,8 +610,8 @@ static inline void blk_rq_bio_prep(struct request *rq, struct bio *bio,
 	rq->bio = rq->biotail = bio;
 	rq->ioprio = bio_prio(bio);
 
-	if (bio->bi_disk)
-		rq->rq_disk = bio->bi_disk;
+	if (bio->bi_bdev)
+		rq->rq_disk = bio->bi_bdev->bd_disk;
 }
 
 blk_qc_t blk_mq_submit_bio(struct bio *bio);

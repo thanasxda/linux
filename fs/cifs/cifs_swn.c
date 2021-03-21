@@ -248,7 +248,7 @@ nlmsg_fail:
 
 /*
  * Try to find a matching registration for the tcon's server name and share name.
- * Calls to this funciton must be protected by cifs_swnreg_idr_mutex.
+ * Calls to this function must be protected by cifs_swnreg_idr_mutex.
  * TODO Try to avoid memory allocations
  */
 static struct cifs_swn_reg *cifs_find_swn_reg(struct cifs_tcon *tcon)
@@ -272,7 +272,7 @@ static struct cifs_swn_reg *cifs_find_swn_reg(struct cifs_tcon *tcon)
 	if (IS_ERR(share_name)) {
 		int ret;
 
-		ret = PTR_ERR(net_name);
+		ret = PTR_ERR(share_name);
 		cifs_dbg(VFS, "%s: failed to extract share name from target '%s': %d\n",
 				__func__, tcon->treeName, ret);
 		kfree(net_name);
@@ -284,8 +284,6 @@ static struct cifs_swn_reg *cifs_find_swn_reg(struct cifs_tcon *tcon)
 		    || strcasecmp(swnreg->share_name, share_name) != 0) {
 			continue;
 		}
-
-		mutex_unlock(&cifs_swnreg_idr_mutex);
 
 		cifs_dbg(FYI, "Existing swn registration for %s:%s found\n", swnreg->net_name,
 				swnreg->share_name);
@@ -482,48 +480,51 @@ static int cifs_swn_store_swn_addr(const struct sockaddr_storage *new,
 
 static int cifs_swn_reconnect(struct cifs_tcon *tcon, struct sockaddr_storage *addr)
 {
+	int ret = 0;
+
 	/* Store the reconnect address */
 	mutex_lock(&tcon->ses->server->srv_mutex);
-	if (!cifs_sockaddr_equal(&tcon->ses->server->dstaddr, addr)) {
-		int ret;
+	if (cifs_sockaddr_equal(&tcon->ses->server->dstaddr, addr))
+		goto unlock;
 
-		ret = cifs_swn_store_swn_addr(addr, &tcon->ses->server->dstaddr,
-				&tcon->ses->server->swn_dstaddr);
-		if (ret < 0) {
-			cifs_dbg(VFS, "%s: failed to store address: %d\n", __func__, ret);
-			return ret;
-		}
-		tcon->ses->server->use_swn_dstaddr = true;
-
-		/*
-		 * Unregister to stop receiving notifications for the old IP address.
-		 */
-		ret = cifs_swn_unregister(tcon);
-		if (ret < 0) {
-			cifs_dbg(VFS, "%s: Failed to unregister for witness notifications: %d\n",
-					__func__, ret);
-			return ret;
-		}
-
-		/*
-		 * And register to receive notifications for the new IP address now that we have
-		 * stored the new address.
-		 */
-		ret = cifs_swn_register(tcon);
-		if (ret < 0) {
-			cifs_dbg(VFS, "%s: Failed to register for witness notifications: %d\n",
-					__func__, ret);
-			return ret;
-		}
-
-		spin_lock(&GlobalMid_Lock);
-		if (tcon->ses->server->tcpStatus != CifsExiting)
-			tcon->ses->server->tcpStatus = CifsNeedReconnect;
-		spin_unlock(&GlobalMid_Lock);
+	ret = cifs_swn_store_swn_addr(addr, &tcon->ses->server->dstaddr,
+				      &tcon->ses->server->swn_dstaddr);
+	if (ret < 0) {
+		cifs_dbg(VFS, "%s: failed to store address: %d\n", __func__, ret);
+		goto unlock;
 	}
+	tcon->ses->server->use_swn_dstaddr = true;
+
+	/*
+	 * Unregister to stop receiving notifications for the old IP address.
+	 */
+	ret = cifs_swn_unregister(tcon);
+	if (ret < 0) {
+		cifs_dbg(VFS, "%s: Failed to unregister for witness notifications: %d\n",
+			 __func__, ret);
+		goto unlock;
+	}
+
+	/*
+	 * And register to receive notifications for the new IP address now that we have
+	 * stored the new address.
+	 */
+	ret = cifs_swn_register(tcon);
+	if (ret < 0) {
+		cifs_dbg(VFS, "%s: Failed to register for witness notifications: %d\n",
+			 __func__, ret);
+		goto unlock;
+	}
+
+	spin_lock(&GlobalMid_Lock);
+	if (tcon->ses->server->tcpStatus != CifsExiting)
+		tcon->ses->server->tcpStatus = CifsNeedReconnect;
+	spin_unlock(&GlobalMid_Lock);
+
+unlock:
 	mutex_unlock(&tcon->ses->server->srv_mutex);
 
-	return 0;
+	return ret;
 }
 
 static int cifs_swn_client_move(struct cifs_swn_reg *swnreg, struct sockaddr_storage *addr)

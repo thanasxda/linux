@@ -10,10 +10,12 @@
 #include <linux/acpi.h>
 #include <linux/bitfield.h>
 #include <linux/extable.h>
+#include <linux/kfence.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
 #include <linux/hardirq.h>
 #include <linux/init.h>
+#include <linux/kasan.h>
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
 #include <linux/page-flags.h>
@@ -33,6 +35,7 @@
 #include <asm/debug-monitors.h>
 #include <asm/esr.h>
 #include <asm/kprobes.h>
+#include <asm/mte.h>
 #include <asm/processor.h>
 #include <asm/sysreg.h>
 #include <asm/system_misc.h>
@@ -296,6 +299,65 @@ static void die_kernel_fault(const char *msg, unsigned long addr,
 	do_exit(SIGKILL);
 }
 
+#ifdef CONFIG_KASAN_HW_TAGS
+static void report_tag_fault(unsigned long addr, unsigned int esr,
+			     struct pt_regs *regs)
+{
+	static bool reported;
+	bool is_write;
+
+	if (READ_ONCE(reported))
+		return;
+
+	/*
+	 * This is used for KASAN tests and assumes that no MTE faults
+	 * happened before running the tests.
+	 */
+	if (mte_report_once())
+		WRITE_ONCE(reported, true);
+
+	/*
+	 * SAS bits aren't set for all faults reported in EL1, so we can't
+	 * find out access size.
+	 */
+	is_write = !!(esr & ESR_ELx_WNR);
+	kasan_report(addr, 0, is_write, regs->pc);
+}
+#else
+/* Tag faults aren't enabled without CONFIG_KASAN_HW_TAGS. */
+static inline void report_tag_fault(unsigned long addr, unsigned int esr,
+				    struct pt_regs *regs) { }
+#endif
+
+static void do_tag_recovery(unsigned long addr, unsigned int esr,
+			   struct pt_regs *regs)
+{
+
+	report_tag_fault(addr, esr, regs);
+
+	/*
+	 * Disable MTE Tag Checking on the local CPU for the current EL.
+	 * It will be done lazily on the other CPUs when they will hit a
+	 * tag fault.
+	 */
+	sysreg_clear_set(sctlr_el1, SCTLR_ELx_TCF_MASK, SCTLR_ELx_TCF_NONE);
+	isb();
+}
+
+static bool is_el1_mte_sync_tag_check_fault(unsigned int esr)
+{
+	unsigned int ec = ESR_ELx_EC(esr);
+	unsigned int fsc = esr & ESR_ELx_FSC;
+
+	if (ec != ESR_ELx_EC_DABT_CUR)
+		return false;
+
+	if (fsc == ESR_ELx_FSC_MTE)
+		return true;
+
+	return false;
+}
+
 static void __do_kernel_fault(unsigned long addr, unsigned int esr,
 			      struct pt_regs *regs)
 {
@@ -312,6 +374,12 @@ static void __do_kernel_fault(unsigned long addr, unsigned int esr,
 	    "Ignoring spurious kernel translation fault at virtual address %016lx\n", addr))
 		return;
 
+	if (is_el1_mte_sync_tag_check_fault(esr)) {
+		do_tag_recovery(addr, esr, regs);
+
+		return;
+	}
+
 	if (is_el1_permission_fault(addr, esr, regs)) {
 		if (esr & ESR_ELx_WNR)
 			msg = "write to read-only memory";
@@ -322,6 +390,9 @@ static void __do_kernel_fault(unsigned long addr, unsigned int esr,
 	} else if (addr < PAGE_SIZE) {
 		msg = "NULL pointer dereference";
 	} else {
+		if (kfence_handle_page_fault(addr, esr & ESR_ELx_WNR, regs))
+			return;
+
 		msg = "paging request";
 	}
 
@@ -505,7 +576,7 @@ retry:
 		mmap_read_lock(mm);
 	} else {
 		/*
-		 * The above down_read_trylock() might have succeeded in which
+		 * The above mmap_read_trylock() might have succeeded in which
 		 * case, we'll have missed the might_sleep() from down_read().
 		 */
 		might_sleep();
@@ -650,10 +721,11 @@ static int do_tag_check_fault(unsigned long far, unsigned int esr,
 			      struct pt_regs *regs)
 {
 	/*
-	 * The architecture specifies that bits 63:60 of FAR_EL1 are UNKNOWN for tag
-	 * check faults. Mask them out now so that userspace doesn't see them.
+	 * The architecture specifies that bits 63:60 of FAR_EL1 are UNKNOWN
+	 * for tag check faults. Set them to corresponding bits in the untagged
+	 * address.
 	 */
-	far &= (1UL << 60) - 1;
+	far = (__untagged_addr(far) & ~MTE_TAG_MASK) | (far & MTE_TAG_MASK);
 	do_bad_area(far, esr, regs);
 	return 0;
 }
@@ -815,43 +887,11 @@ static void debug_exception_exit(struct pt_regs *regs)
 }
 NOKPROBE_SYMBOL(debug_exception_exit);
 
-#ifdef CONFIG_ARM64_ERRATUM_1463225
-DECLARE_PER_CPU(int, __in_cortex_a76_erratum_1463225_wa);
-
-static int cortex_a76_erratum_1463225_debug_handler(struct pt_regs *regs)
-{
-	if (user_mode(regs))
-		return 0;
-
-	if (!__this_cpu_read(__in_cortex_a76_erratum_1463225_wa))
-		return 0;
-
-	/*
-	 * We've taken a dummy step exception from the kernel to ensure
-	 * that interrupts are re-enabled on the syscall path. Return back
-	 * to cortex_a76_erratum_1463225_svc_handler() with debug exceptions
-	 * masked so that we can safely restore the mdscr and get on with
-	 * handling the syscall.
-	 */
-	regs->pstate |= PSR_D_BIT;
-	return 1;
-}
-#else
-static int cortex_a76_erratum_1463225_debug_handler(struct pt_regs *regs)
-{
-	return 0;
-}
-#endif /* CONFIG_ARM64_ERRATUM_1463225 */
-NOKPROBE_SYMBOL(cortex_a76_erratum_1463225_debug_handler);
-
 void do_debug_exception(unsigned long addr_if_watchpoint, unsigned int esr,
 			struct pt_regs *regs)
 {
 	const struct fault_info *inf = esr_to_debug_fault_info(esr);
 	unsigned long pc = instruction_pointer(regs);
-
-	if (cortex_a76_erratum_1463225_debug_handler(regs))
-		return;
 
 	debug_exception_enter(regs);
 
