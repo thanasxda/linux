@@ -87,8 +87,8 @@ echo "1" > /proc/sys/vm/oom_dump_tasks
 echo "1" > /proc/sys/vm/oom_kill_allocating_task
 echo "1200" > /proc/sys/vm/stat_interval
 echo "10" > /proc/sys/vm/vfs_cache_pressure
-echo "90" > /proc/sys/vm/swappiness
-sysctl vm.swappiness=90
+echo "40" > /proc/sys/vm/swappiness
+sysctl vm.swappiness=40
 sysctl vm.dirty_ratio=80
 sysctl vm.dirty_background_ratio=5
 sysctl vm.dirty_expire_centisecs=12000
