@@ -54,13 +54,14 @@ echo -e "${restore}"
 ### not included in clang-11 for now, due to compiler errors
 ##export CROSS_COMPILE=/usr/bin/x86_64-linux-gnu-
 path=/usr/bin
-path2=/usr/lib/llvm-12/bin
+path2=/usr/lib/llvm-13/bin
 
 ### set to prebuilt compiler
-xpath=~/TOOLCHAIN/clang/bin
-export LD_LIBRARY_PATH=""$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
-export PATH=""$path2":$PATH"
-#CLANG="CC=$xpath/clang
+#xpath=~/TOOLCHAIN/clang/bin
+export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
+export PATH=""$path":"$path2":$PATH"
+
+# CLANG="CC=$xpath/clang
 #        HOSTCC=$xpath/clang
 #        AR=$xpath/llvm-ar
 #        NM=$xpath/llvm-nm
@@ -72,15 +73,15 @@ export PATH=""$path2":$PATH"
 #        LD=$xpath/ld.lld"
 
 ### set to system compiler
-CLANG="CC=clang
-        HOSTCC=clang
-        AR=llvm-ar
-        NM=llvm-nm
-        OBJCOPY=llvm-objcopy
-        OBJDUMP=llvm-objdump
-        READELF=llvm-readelf
-        OBJSIZE=llvm-size
-        STRIP=llvm-strip"
+CLANG="CC=clang-13
+        HOSTCC=clang-13
+        AR=llvm-ar-13
+        NM=llvm-nm-13
+        OBJCOPY=llvm-objcopy-13
+        OBJDUMP=llvm-objdump-13
+        READELF=llvm-readelf-13
+        OBJSIZE=llvm-size-13
+        STRIP=llvm-strip-13"
 ### optionally set linker seperately
 LD="LD=ld.lld"
 ### enable verbose output for debugging
