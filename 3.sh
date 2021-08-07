@@ -54,11 +54,11 @@ echo -e "${restore}"
 ### not included in clang-11 for now, due to compiler errors
 ##export CROSS_COMPILE=/usr/bin/x86_64-linux-gnu-
 path=/usr/bin
-path2=/usr/lib/llvm-13/bin
+path2=/usr/lib/llvm-14/bin
 
 ### set to prebuilt compiler
 #xpath=~/TOOLCHAIN/clang/bin
-export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH=""$path"/../lib:"$path"/../lib64:$path2"/../lib:"$path2"/../lib64:$LD_LIBRARY_PATH""
 export PATH=""$path":"$path2":$PATH"
 
 # CLANG="CC=$xpath/clang
@@ -73,17 +73,17 @@ export PATH=""$path":"$path2":$PATH"
 #        LD=$xpath/ld.lld"
 
 ### set to system compiler
-CLANG="CC=clang-13
-        HOSTCC=clang-13
-        AR=llvm-ar-13
-        NM=llvm-nm-13
-        OBJCOPY=llvm-objcopy-13
-        OBJDUMP=llvm-objdump-13
-        READELF=llvm-readelf-13
-        OBJSIZE=llvm-size-13
-        STRIP=llvm-strip-13"
+CLANG="CC=clang-14
+        HOSTCC=clang-14
+        AR=llvm-ar-14
+        NM=llvm-nm-14
+        OBJCOPY=llvm-objcopy-14
+        OBJDUMP=llvm-objdump-14
+        READELF=llvm-readelf-14
+        OBJSIZE=llvm-size-14
+        STRIP=llvm-strip-14"
 ### optionally set linker seperately
-LD="LD=ld.lld"
+#LD="LD=ld.lld"
 ### enable verbose output for debugging
 #VERBOSE="V=1"
 ### ensure all cpu threads are used for compilation
@@ -106,7 +106,7 @@ Keys.ENTER | sudo make $CLANG $LD localmodconfig
 #make xconfig
 
 ###### DISABLE RETPOLINE
-sudo sed -i '/CONFIG_RETPOLINE/c\# CONFIG_RETPOLINE is not set' "$(pwd)"/.config
+#sudo sed -i '/CONFIG_RETPOLINE/c\# CONFIG_RETPOLINE is not set' "$(pwd)"/.config
 
 ###### START COMPILATION
 Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD
