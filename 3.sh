@@ -106,7 +106,7 @@ Keys.ENTER | sudo make $CLANG $LD localmodconfig
 #make xconfig
 
 ###### DISABLE RETPOLINE
-#sudo sed -i '/CONFIG_RETPOLINE/c\# CONFIG_RETPOLINE is not set' "$(pwd)"/.config
+sudo sed -i '/CONFIG_RETPOLINE/c\# CONFIG_RETPOLINE is not set' "$(pwd)"/.config
 
 ###### START COMPILATION
 Keys.ENTER | sudo make $THREADS $VERBOSE $CLANG $LD
