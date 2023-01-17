@@ -49,6 +49,13 @@ static int ffa_device_probe(struct device *dev)
 	return ffa_drv->probe(ffa_dev);
 }
 
+static void ffa_device_remove(struct device *dev)
+{
+	struct ffa_driver *ffa_drv = to_ffa_driver(dev->driver);
+
+	ffa_drv->remove(to_ffa_dev(dev));
+}
+
 static int ffa_device_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	struct ffa_device *ffa_dev = to_ffa_dev(dev);
@@ -86,6 +93,7 @@ struct bus_type ffa_bus_type = {
 	.name		= "arm_ffa",
 	.match		= ffa_device_match,
 	.probe		= ffa_device_probe,
+	.remove		= ffa_device_remove,
 	.uevent		= ffa_device_uevent,
 	.dev_groups	= ffa_device_attributes_groups,
 };
@@ -127,7 +135,7 @@ static void ffa_release_device(struct device *dev)
 
 static int __ffa_devices_unregister(struct device *dev, void *data)
 {
-	ffa_release_device(dev);
+	device_unregister(dev);
 
 	return 0;
 }
@@ -159,7 +167,8 @@ bool ffa_device_is_valid(struct ffa_device *ffa_dev)
 	return valid;
 }
 
-struct ffa_device *ffa_device_register(const uuid_t *uuid, int vm_id)
+struct ffa_device *ffa_device_register(const uuid_t *uuid, int vm_id,
+				       const struct ffa_ops *ops)
 {
 	int ret;
 	struct device *dev;
@@ -175,6 +184,7 @@ struct ffa_device *ffa_device_register(const uuid_t *uuid, int vm_id)
 	dev_set_name(&ffa_dev->dev, "arm-ffa-%04x", vm_id);
 
 	ffa_dev->vm_id = vm_id;
+	ffa_dev->ops = ops;
 	uuid_copy(&ffa_dev->uuid, uuid);
 
 	ret = device_register(&ffa_dev->dev);

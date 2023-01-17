@@ -140,7 +140,6 @@
 		compatible = "haoyu,hym8563";
 		reg = <0x51>;
 		#clock-cells = <0>;
-		clock-frequency = <32768>;
 		clock-output-names = "xin32k";
 	};
 };
@@ -218,6 +217,8 @@
 };
 
 &sd_emmc_a {
+	max-frequency = <100000000>;
+
 	brcmf: wifi@1 {
 		reg = <1>;
 		compatible = "brcm,bcm4329-fmac";

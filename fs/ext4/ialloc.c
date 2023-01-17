@@ -300,7 +300,8 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 	}
 
 	BUFFER_TRACE(bitmap_bh, "get_write_access");
-	fatal = ext4_journal_get_write_access(handle, bitmap_bh);
+	fatal = ext4_journal_get_write_access(handle, sb, bitmap_bh,
+					      EXT4_JTR_NONE);
 	if (fatal)
 		goto error_return;
 
@@ -308,7 +309,8 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 	gdp = ext4_get_group_desc(sb, block_group, &bh2);
 	if (gdp) {
 		BUFFER_TRACE(bh2, "get_write_access");
-		fatal = ext4_journal_get_write_access(handle, bh2);
+		fatal = ext4_journal_get_write_access(handle, sb, bh2,
+						      EXT4_JTR_NONE);
 	}
 	ext4_lock_group(sb, block_group);
 	cleared = ext4_test_and_clear_bit(bit, bitmap_bh->b_data);
@@ -461,10 +463,9 @@ static int find_group_orlov(struct super_block *sb, struct inode *parent,
 			hinfo.hash_version = DX_HASH_HALF_MD4;
 			hinfo.seed = sbi->s_hash_seed;
 			ext4fs_dirhash(parent, qstr->name, qstr->len, &hinfo);
-			grp = hinfo.hash;
+			parent_group = hinfo.hash % ngroups;
 		} else
-			grp = prandom_u32();
-		parent_group = (unsigned)grp % ngroups;
+			parent_group = get_random_u32_below(ngroups);
 		for (i = 0; i < ngroups; i++) {
 			g = (parent_group + i) % ngroups;
 			get_orlov_stats(sb, g, flex_size, &stats);
@@ -508,7 +509,7 @@ static int find_group_orlov(struct super_block *sb, struct inode *parent,
 		goto fallback;
 	}
 
-	max_dirs = ndirs / ngroups + inodes_per_group / 16;
+	max_dirs = ndirs / ngroups + inodes_per_group*flex_size / 16;
 	min_inodes = avefreei - inodes_per_group*flex_size / 4;
 	if (min_inodes < 1)
 		min_inodes = 1;
@@ -869,7 +870,7 @@ static int ext4_xattr_credits_for_new_inode(struct inode *dir, mode_t mode,
 	struct super_block *sb = dir->i_sb;
 	int nblocks = 0;
 #ifdef CONFIG_EXT4_FS_POSIX_ACL
-	struct posix_acl *p = get_acl(dir, ACL_TYPE_DEFAULT);
+	struct posix_acl *p = get_inode_acl(dir, ACL_TYPE_DEFAULT);
 
 	if (IS_ERR(p))
 		return PTR_ERR(p);
@@ -1075,8 +1076,8 @@ repeat_in_this_group:
 
 		if ((!(sbi->s_mount_state & EXT4_FC_REPLAY)) && !handle) {
 			BUG_ON(nblocks <= 0);
-			handle = __ext4_journal_start_sb(dir->i_sb, line_no,
-				 handle_type, nblocks, 0,
+			handle = __ext4_journal_start_sb(NULL, dir->i_sb,
+				 line_no, handle_type, nblocks, 0,
 				 ext4_trans_default_revoke_credits(sb));
 			if (IS_ERR(handle)) {
 				err = PTR_ERR(handle);
@@ -1085,7 +1086,8 @@ repeat_in_this_group:
 			}
 		}
 		BUFFER_TRACE(inode_bitmap_bh, "get_write_access");
-		err = ext4_journal_get_write_access(handle, inode_bitmap_bh);
+		err = ext4_journal_get_write_access(handle, sb, inode_bitmap_bh,
+						    EXT4_JTR_NONE);
 		if (err) {
 			ext4_std_error(sb, err);
 			goto out;
@@ -1127,7 +1129,8 @@ got:
 	}
 
 	BUFFER_TRACE(group_desc_bh, "get_write_access");
-	err = ext4_journal_get_write_access(handle, group_desc_bh);
+	err = ext4_journal_get_write_access(handle, sb, group_desc_bh,
+					    EXT4_JTR_NONE);
 	if (err) {
 		ext4_std_error(sb, err);
 		goto out;
@@ -1144,7 +1147,8 @@ got:
 			goto out;
 		}
 		BUFFER_TRACE(block_bitmap_bh, "get block bitmap access");
-		err = ext4_journal_get_write_access(handle, block_bitmap_bh);
+		err = ext4_journal_get_write_access(handle, sb, block_bitmap_bh,
+						    EXT4_JTR_NONE);
 		if (err) {
 			brelse(block_bitmap_bh);
 			ext4_std_error(sb, err);
@@ -1275,7 +1279,7 @@ got:
 					EXT4_GROUP_INFO_IBITMAP_CORRUPT);
 		goto out;
 	}
-	inode->i_generation = prandom_u32();
+	inode->i_generation = get_random_u32();
 
 	/* Precompute checksum seed for inode metadata */
 	if (ext4_has_metadata_csum(sb)) {
@@ -1583,8 +1587,8 @@ int ext4_init_inode_table(struct super_block *sb, ext4_group_t group,
 	num = sbi->s_itb_per_group - used_blks;
 
 	BUFFER_TRACE(group_desc_bh, "get_write_access");
-	ret = ext4_journal_get_write_access(handle,
-					    group_desc_bh);
+	ret = ext4_journal_get_write_access(handle, sb, group_desc_bh,
+					    EXT4_JTR_NONE);
 	if (ret)
 		goto err_out;
 

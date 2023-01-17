@@ -141,12 +141,15 @@ fail:
  * inode->i_mutex: don't care
  */
 struct posix_acl *
-ext2_get_acl(struct inode *inode, int type)
+ext2_get_acl(struct inode *inode, int type, bool rcu)
 {
 	int name_index;
 	char *value = NULL;
 	struct posix_acl *acl;
 	int retval;
+
+	if (rcu)
+		return ERR_PTR(-ECHILD);
 
 	switch (type) {
 	case ACL_TYPE_ACCESS:
@@ -216,11 +219,12 @@ __ext2_set_acl(struct inode *inode, struct posix_acl *acl, int type)
  * inode->i_mutex: down
  */
 int
-ext2_set_acl(struct user_namespace *mnt_userns, struct inode *inode,
+ext2_set_acl(struct user_namespace *mnt_userns, struct dentry *dentry,
 	     struct posix_acl *acl, int type)
 {
 	int error;
 	int update_mode = 0;
+	struct inode *inode = d_inode(dentry);
 	umode_t mode = inode->i_mode;
 
 	if (type == ACL_TYPE_ACCESS && acl) {

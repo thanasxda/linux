@@ -42,6 +42,10 @@ static void j1939_can_recv(struct sk_buff *iskb, void *data)
 	struct j1939_sk_buff_cb *skcb, *iskcb;
 	struct can_frame *cf;
 
+	/* make sure we only get Classical CAN frames */
+	if (!can_is_can_skb(iskb))
+		return;
+
 	/* create a copy of the skb
 	 * j1939 only delivers the real data bytes,
 	 * the header goes into sockaddr.
@@ -75,6 +79,13 @@ static void j1939_can_recv(struct sk_buff *iskb, void *data)
 	skcb->addr.pgn = (cf->can_id >> 8) & J1939_PGN_MAX;
 	/* set default message type */
 	skcb->addr.type = J1939_TP;
+
+	if (!j1939_address_is_valid(skcb->addr.sa)) {
+		netdev_err_once(priv->ndev, "%s: sa is broadcast address, ignoring!\n",
+				__func__);
+		goto done;
+	}
+
 	if (j1939_pgn_is_pdu1(skcb->addr.pgn)) {
 		/* Type 1: with destination address */
 		skcb->addr.da = skcb->addr.pgn;
@@ -249,11 +260,14 @@ struct j1939_priv *j1939_netdev_start(struct net_device *ndev)
 	struct j1939_priv *priv, *priv_new;
 	int ret;
 
-	priv = j1939_priv_get_by_ndev(ndev);
+	spin_lock(&j1939_netdev_lock);
+	priv = j1939_priv_get_by_ndev_locked(ndev);
 	if (priv) {
 		kref_get(&priv->rx_kref);
+		spin_unlock(&j1939_netdev_lock);
 		return priv;
 	}
+	spin_unlock(&j1939_netdev_lock);
 
 	priv = j1939_priv_create(ndev);
 	if (!priv)
@@ -269,10 +283,10 @@ struct j1939_priv *j1939_netdev_start(struct net_device *ndev)
 		/* Someone was faster than us, use their priv and roll
 		 * back our's.
 		 */
+		kref_get(&priv_new->rx_kref);
 		spin_unlock(&j1939_netdev_lock);
 		dev_put(ndev);
 		kfree(priv);
-		kref_get(&priv_new->rx_kref);
 		return priv_new;
 	}
 	j1939_priv_set(ndev, priv);
@@ -321,6 +335,9 @@ int j1939_send_one(struct j1939_priv *priv, struct sk_buff *skb)
 
 	/* re-claim the CAN_HDR from the SKB */
 	cf = skb_push(skb, J1939_CAN_HDR);
+
+	/* initialize header structure */
+	memset(cf, 0, J1939_CAN_HDR);
 
 	/* make it a full can frame again */
 	skb_put(skb, J1939_CAN_FTR + (8 - dlc));

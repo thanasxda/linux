@@ -20,6 +20,7 @@
 *.dtb
 *.dtbo
 *.dtb.S
+*.dtbo.S
 *.dwo
 *.elf
 *.gcno
@@ -37,6 +38,9 @@
 *.o
 *.o.*
 *.patch
+*.rmeta
+*.rpm
+*.rsi
 *.s
 v*.so
 *.so.dbg
@@ -45,6 +49,7 @@ v*.so
 *.symversions
 *.tab.[ch]
 *.tar
+*.usyms
 *.xz
 *.zst
 Module.symvers
@@ -96,6 +101,7 @@ modules.order
 !.gitattributes
 !.gitignore
 !.mailmap
+!.rustfmt.toml
 
 #
 # Generated include files
@@ -166,3 +172,6 @@ thanas2_defconfig
 
 # Documentation toolchain
 sphinx_*/
+
+# Rust analyzer configuration
+/rust-project.json

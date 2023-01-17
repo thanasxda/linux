@@ -11,10 +11,28 @@
 #include <stdlib.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <linux/mman.h>
 #include "linux/kernel.h"
 
 #include "test_util.h"
+
+/*
+ * Random number generator that is usable from guest code. This is the
+ * Park-Miller LCG using standard constants.
+ */
+
+struct guest_random_state new_guest_random_state(uint32_t seed)
+{
+	struct guest_random_state s = {.seed = seed};
+	return s;
+}
+
+uint32_t guest_random_u32(struct guest_random_state *state)
+{
+	state->seed = (uint64_t)state->seed * 48271 % ((uint32_t)(1 << 31) - 1);
+	return state->seed;
+}
 
 /*
  * Parses "[0-9]+[kmgt]?".
@@ -129,13 +147,16 @@ size_t get_trans_hugepagesz(void)
 {
 	size_t size;
 	FILE *f;
+	int ret;
 
 	TEST_ASSERT(thp_configured(), "THP is not configured in host kernel");
 
 	f = fopen("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", "r");
 	TEST_ASSERT(f != NULL, "Error in opening transparent_hugepage/hpage_pmd_size");
 
-	fscanf(f, "%ld", &size);
+	ret = fscanf(f, "%ld", &size);
+	ret = fscanf(f, "%ld", &size);
+	TEST_ASSERT(ret < 1, "Error reading transparent_hugepage/hpage_pmd_size");
 	fclose(f);
 
 	return size;
@@ -279,13 +300,27 @@ size_t get_backing_src_pagesz(uint32_t i)
 	}
 }
 
-void backing_src_help(void)
+bool is_backing_src_hugetlb(uint32_t i)
+{
+	return !!(vm_mem_backing_src_alias(i)->flag & MAP_HUGETLB);
+}
+
+static void print_available_backing_src_types(const char *prefix)
 {
 	int i;
 
-	printf("Available backing src types:\n");
+	printf("%sAvailable backing src types:\n", prefix);
+
 	for (i = 0; i < NUM_SRC_TYPES; i++)
-		printf("\t%s\n", vm_mem_backing_src_alias(i)->name);
+		printf("%s    %s\n", prefix, vm_mem_backing_src_alias(i)->name);
+}
+
+void backing_src_help(const char *flag)
+{
+	printf(" %s: specify the type of memory that should be used to\n"
+	       "     back the guest data region. (default: %s)\n",
+	       flag, vm_mem_backing_src_alias(DEFAULT_VM_MEM_SRC)->name);
+	print_available_backing_src_types("     ");
 }
 
 enum vm_mem_backing_src_type parse_backing_src_type(const char *type_name)
@@ -296,7 +331,42 @@ enum vm_mem_backing_src_type parse_backing_src_type(const char *type_name)
 		if (!strcmp(type_name, vm_mem_backing_src_alias(i)->name))
 			return i;
 
-	backing_src_help();
+	print_available_backing_src_types("");
 	TEST_FAIL("Unknown backing src type: %s", type_name);
 	return -1;
+}
+
+long get_run_delay(void)
+{
+	char path[64];
+	long val[2];
+	FILE *fp;
+
+	sprintf(path, "/proc/%ld/schedstat", syscall(SYS_gettid));
+	fp = fopen(path, "r");
+	/* Return MIN_RUN_DELAY_NS upon failure just to be safe */
+	if (fscanf(fp, "%ld %ld ", &val[0], &val[1]) < 2)
+		val[1] = MIN_RUN_DELAY_NS;
+	fclose(fp);
+
+	return val[1];
+}
+
+int atoi_paranoid(const char *num_str)
+{
+	char *end_ptr;
+	long num;
+
+	errno = 0;
+	num = strtol(num_str, &end_ptr, 0);
+	TEST_ASSERT(!errno, "strtol(\"%s\") failed", num_str);
+	TEST_ASSERT(num_str != end_ptr,
+		    "strtol(\"%s\") didn't find a valid integer.", num_str);
+	TEST_ASSERT(*end_ptr == '\0',
+		    "strtol(\"%s\") failed to parse trailing characters \"%s\".",
+		    num_str, end_ptr);
+	TEST_ASSERT(num >= INT_MIN && num <= INT_MAX,
+		    "%ld not in range of [%d, %d]", num, INT_MIN, INT_MAX);
+
+	return num;
 }

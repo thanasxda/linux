@@ -82,6 +82,7 @@ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
 #define QUIRK_T90CHI			BIT(9)
 #define QUIRK_MEDION_E1239T		BIT(10)
 #define QUIRK_ROG_NKEY_KEYBOARD		BIT(11)
+#define QUIRK_ROG_CLAYMORE_II_KEYBOARD BIT(12)
 
 #define I2C_KEYBOARD_QUIRKS			(QUIRK_FIX_NOTEBOOK_REPORT | \
 						 QUIRK_NO_INIT_REPORTS | \
@@ -218,14 +219,13 @@ static void asus_report_tool_width(struct asus_drvdata *drvdat)
 {
 	struct input_mt *mt = drvdat->input->mt;
 	struct input_mt_slot *oldest;
-	int oldid, count, i;
+	int oldid, i;
 
 	if (drvdat->tp->contact_size < 5)
 		return;
 
 	oldest = NULL;
 	oldid = mt->trkid;
-	count = 0;
 
 	for (i = 0; i < mt->num_slots; ++i) {
 		struct input_mt_slot *ps = &mt->slots[i];
@@ -237,7 +237,6 @@ static void asus_report_tool_width(struct asus_drvdata *drvdat)
 			oldest = ps;
 			oldid = id;
 		}
-		count++;
 	}
 
 	if (oldest) {
@@ -364,6 +363,17 @@ static int asus_raw_event(struct hid_device *hdev,
 			}
 		}
 
+	}
+
+	if (drvdata->quirks & QUIRK_ROG_CLAYMORE_II_KEYBOARD) {
+		/*
+		 * CLAYMORE II keyboard sends this packet when it goes to sleep
+		 * this causes the whole system to go into suspend.
+		*/
+
+		if(size == 2 && data[0] == 0x02 && data[1] == 0x00) {
+			return -1;
+		}
 	}
 
 	return 0;
@@ -1016,8 +1026,7 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (drvdata->quirks & QUIRK_IS_MULTITOUCH)
 		drvdata->tp = &asus_i2c_tp;
 
-	if ((drvdata->quirks & QUIRK_T100_KEYBOARD) &&
-	    hid_is_using_ll_driver(hdev, &usb_hid_driver)) {
+	if ((drvdata->quirks & QUIRK_T100_KEYBOARD) && hid_is_usb(hdev)) {
 		struct usb_interface *intf = to_usb_interface(hdev->dev.parent);
 
 		if (intf->altsetting->desc.bInterfaceNumber == T100_TPAD_INTF) {
@@ -1045,8 +1054,7 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		drvdata->tp = &asus_t100chi_tp;
 	}
 
-	if ((drvdata->quirks & QUIRK_MEDION_E1239T) &&
-	    hid_is_using_ll_driver(hdev, &usb_hid_driver)) {
+	if ((drvdata->quirks & QUIRK_MEDION_E1239T) && hid_is_usb(hdev)) {
 		struct usb_host_interface *alt =
 			to_usb_interface(hdev->dev.parent)->altsetting;
 
@@ -1202,6 +1210,13 @@ static __u8 *asus_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 		rdesc = new_rdesc;
 	}
 
+	if (drvdata->quirks & QUIRK_ROG_NKEY_KEYBOARD &&
+			*rsize == 331 && rdesc[190] == 0x85 && rdesc[191] == 0x5a &&
+			rdesc[204] == 0x95 && rdesc[205] == 0x05) {
+		hid_info(hdev, "Fixing up Asus N-KEY keyb report descriptor\n");
+		rdesc[205] = 0x01;
+	}
+
 	return rdesc;
 }
 
@@ -1225,6 +1240,9 @@ static const struct hid_device_id asus_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_ASUSTEK,
 	    USB_DEVICE_ID_ASUSTEK_ROG_NKEY_KEYBOARD2),
 	  QUIRK_USE_KBD_BACKLIGHT | QUIRK_ROG_NKEY_KEYBOARD },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_ASUSTEK,
+	    USB_DEVICE_ID_ASUSTEK_ROG_CLAYMORE_II_KEYBOARD),
+	  QUIRK_ROG_CLAYMORE_II_KEYBOARD },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_ASUSTEK,
 		USB_DEVICE_ID_ASUSTEK_T100TA_KEYBOARD),
 	  QUIRK_T100_KEYBOARD | QUIRK_NO_CONSUMER_USAGES },

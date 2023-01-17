@@ -1076,7 +1076,7 @@ static int s3c24xx_i2c_probe(struct platform_device *pdev)
 	else
 		s3c24xx_i2c_parse_dt(pdev->dev.of_node, i2c);
 
-	strlcpy(i2c->adap.name, "s3c2410-i2c", sizeof(i2c->adap.name));
+	strscpy(i2c->adap.name, "s3c2410-i2c", sizeof(i2c->adap.name));
 	i2c->adap.owner = THIS_MODULE;
 	i2c->adap.algo = &s3c24xx_i2c_algorithm;
 	i2c->adap.retries = 2;
@@ -1137,7 +1137,7 @@ static int s3c24xx_i2c_probe(struct platform_device *pdev)
 	 */
 	if (!(i2c->quirks & QUIRK_POLL)) {
 		i2c->irq = ret = platform_get_irq(pdev, 0);
-		if (ret <= 0) {
+		if (ret < 0) {
 			dev_err(&pdev->dev, "cannot find IRQ\n");
 			clk_unprepare(i2c->clk);
 			return ret;

@@ -24,7 +24,7 @@
 #include "nouveau_chan.h"
 #include "nouveau_dmem.h"
 
-#include <nvif/notify.h>
+#include <nvif/event.h>
 #include <nvif/object.h>
 #include <nvif/vmm.h>
 
@@ -35,6 +35,7 @@
 #include <linux/sched/mm.h>
 #include <linux/sort.h>
 #include <linux/hmm.h>
+#include <linux/memremap.h>
 #include <linux/rmap.h>
 
 struct nouveau_svm {
@@ -50,7 +51,8 @@ struct nouveau_svm {
 		u32 putaddr;
 		u32 get;
 		u32 put;
-		struct nvif_notify notify;
+		struct nvif_event notify;
+		struct work_struct work;
 
 		struct nouveau_svm_fault {
 			u64 inst;
@@ -162,10 +164,14 @@ nouveau_svmm_bind(struct drm_device *dev, void *data,
 	 */
 
 	mm = get_task_mm(current);
+	if (!mm) {
+		return -EINVAL;
+	}
 	mmap_read_lock(mm);
 
 	if (!cli->svm.svmm) {
 		mmap_read_unlock(mm);
+		mmput(mm);
 		return -EINVAL;
 	}
 
@@ -237,14 +243,11 @@ void
 nouveau_svmm_invalidate(struct nouveau_svmm *svmm, u64 start, u64 limit)
 {
 	if (limit > start) {
-		bool super = svmm->vmm->vmm.object.client->super;
-		svmm->vmm->vmm.object.client->super = true;
 		nvif_object_mthd(&svmm->vmm->vmm.object, NVIF_VMM_V0_PFNCLR,
 				 &(struct nvif_vmm_pfnclr_v0) {
 					.addr = start,
 					.size = limit - start,
 				 }, sizeof(struct nvif_vmm_pfnclr_v0));
-		svmm->vmm->vmm.object.client->super = super;
 	}
 }
 
@@ -634,9 +637,7 @@ static int nouveau_atomic_range_fault(struct nouveau_svmm *svmm,
 		NVIF_VMM_PFNMAP_V0_A |
 		NVIF_VMM_PFNMAP_V0_HOST;
 
-	svmm->vmm->vmm.object.client->super = true;
 	ret = nvif_object_ioctl(&svmm->vmm->vmm.object, args, size, NULL);
-	svmm->vmm->vmm.object.client->super = false;
 	mutex_unlock(&svmm->mutex);
 
 	unlock_page(page);
@@ -702,9 +703,7 @@ static int nouveau_range_fault(struct nouveau_svmm *svmm,
 
 	nouveau_hmm_convert_pfn(drm, &range, args);
 
-	svmm->vmm->vmm.object.client->super = true;
 	ret = nvif_object_ioctl(&svmm->vmm->vmm.object, args, size, NULL);
-	svmm->vmm->vmm.object.client->super = false;
 	mutex_unlock(&svmm->mutex);
 
 out:
@@ -713,13 +712,11 @@ out:
 	return ret;
 }
 
-static int
-nouveau_svm_fault(struct nvif_notify *notify)
+static void
+nouveau_svm_fault(struct work_struct *work)
 {
-	struct nouveau_svm_fault_buffer *buffer =
-		container_of(notify, typeof(*buffer), notify);
-	struct nouveau_svm *svm =
-		container_of(buffer, typeof(*svm), buffer[buffer->id]);
+	struct nouveau_svm_fault_buffer *buffer = container_of(work, typeof(*buffer), work);
+	struct nouveau_svm *svm = container_of(buffer, typeof(*svm), buffer[buffer->id]);
 	struct nvif_object *device = &svm->drm->client.device.object;
 	struct nouveau_svmm *svmm;
 	struct {
@@ -739,7 +736,7 @@ nouveau_svm_fault(struct nvif_notify *notify)
 		buffer->put = nvif_rd32(device, buffer->putaddr);
 		buffer->get = nvif_rd32(device, buffer->getaddr);
 		if (buffer->get == buffer->put)
-			return NVIF_NOTIFY_KEEP;
+			return;
 	}
 	buffer->fault_nr = 0;
 
@@ -883,7 +880,15 @@ nouveau_svm_fault(struct nvif_notify *notify)
 	/* Issue fault replay to the GPU. */
 	if (replay)
 		nouveau_svm_fault_replay(svm);
-	return NVIF_NOTIFY_KEEP;
+}
+
+static int
+nouveau_svm_event(struct nvif_event *event, void *argv, u32 argc)
+{
+	struct nouveau_svm_fault_buffer *buffer = container_of(event, typeof(*buffer), notify);
+
+	schedule_work(&buffer->work);
+	return NVIF_EVENT_KEEP;
 }
 
 static struct nouveau_pfnmap_args *
@@ -928,10 +933,8 @@ nouveau_pfns_map(struct nouveau_svmm *svmm, struct mm_struct *mm,
 
 	mutex_lock(&svmm->mutex);
 
-	svmm->vmm->vmm.object.client->super = true;
-	ret = nvif_object_ioctl(&svmm->vmm->vmm.object, args, sizeof(*args) +
-				npages * sizeof(args->p.phys[0]), NULL);
-	svmm->vmm->vmm.object.client->super = false;
+	ret = nvif_object_ioctl(&svmm->vmm->vmm.object, args,
+				struct_size(args, p.phys, npages), NULL);
 
 	mutex_unlock(&svmm->mutex);
 }
@@ -940,7 +943,9 @@ static void
 nouveau_svm_fault_buffer_fini(struct nouveau_svm *svm, int id)
 {
 	struct nouveau_svm_fault_buffer *buffer = &svm->buffer[id];
-	nvif_notify_put(&buffer->notify);
+
+	nvif_event_block(&buffer->notify);
+	flush_work(&buffer->work);
 }
 
 static int
@@ -948,10 +953,12 @@ nouveau_svm_fault_buffer_init(struct nouveau_svm *svm, int id)
 {
 	struct nouveau_svm_fault_buffer *buffer = &svm->buffer[id];
 	struct nvif_object *device = &svm->drm->client.device.object;
+
 	buffer->get = nvif_rd32(device, buffer->getaddr);
 	buffer->put = nvif_rd32(device, buffer->putaddr);
 	SVM_DBG(svm, "get %08x put %08x (init)", buffer->get, buffer->put);
-	return nvif_notify_get(&buffer->notify);
+
+	return nvif_event_allow(&buffer->notify);
 }
 
 static void
@@ -960,15 +967,18 @@ nouveau_svm_fault_buffer_dtor(struct nouveau_svm *svm, int id)
 	struct nouveau_svm_fault_buffer *buffer = &svm->buffer[id];
 	int i;
 
+	if (!nvif_object_constructed(&buffer->object))
+		return;
+
+	nouveau_svm_fault_buffer_fini(svm, id);
+
 	if (buffer->fault) {
 		for (i = 0; buffer->fault[i] && i < buffer->entries; i++)
 			kfree(buffer->fault[i]);
 		kvfree(buffer->fault);
 	}
 
-	nouveau_svm_fault_buffer_fini(svm, id);
-
-	nvif_notify_dtor(&buffer->notify);
+	nvif_event_dtor(&buffer->notify);
 	nvif_object_dtor(&buffer->object);
 }
 
@@ -994,14 +1004,14 @@ nouveau_svm_fault_buffer_ctor(struct nouveau_svm *svm, s32 oclass, int id)
 	buffer->entries = args.entries;
 	buffer->getaddr = args.get;
 	buffer->putaddr = args.put;
+	INIT_WORK(&buffer->work, nouveau_svm_fault);
 
-	ret = nvif_notify_ctor(&buffer->object, "svmFault", nouveau_svm_fault,
-			       true, NVB069_V0_NTFY_FAULT, NULL, 0, 0,
-			       &buffer->notify);
+	ret = nvif_event_ctor(&buffer->object, "svmFault", id, nouveau_svm_event, true, NULL, 0,
+			      &buffer->notify);
 	if (ret)
 		return ret;
 
-	buffer->fault = kvzalloc(sizeof(*buffer->fault) * buffer->entries, GFP_KERNEL);
+	buffer->fault = kvcalloc(sizeof(*buffer->fault), buffer->entries, GFP_KERNEL);
 	if (!buffer->fault)
 		return -ENOMEM;
 

@@ -126,13 +126,14 @@ xfs_filestream_pick_ag(
 		pag = xfs_perag_get(mp, ag);
 
 		if (!pag->pagf_init) {
-			err = xfs_alloc_pagf_init(mp, NULL, ag, trylock);
+			err = xfs_alloc_read_agf(pag, NULL, trylock, NULL);
 			if (err) {
-				xfs_perag_put(pag);
-				if (err != -EAGAIN)
+				if (err != -EAGAIN) {
+					xfs_perag_put(pag);
 					return err;
+				}
 				/* Couldn't lock the AGF, skip this AG. */
-				continue;
+				goto next_ag;
 			}
 		}
 
@@ -180,7 +181,7 @@ next_ag:
 		if (ag != startag)
 			continue;
 
-		/* Allow sleeping in xfs_alloc_pagf_init() on the 2nd pass. */
+		/* Allow sleeping in xfs_alloc_read_agf() on the 2nd pass. */
 		if (trylock != 0) {
 			trylock = 0;
 			continue;
@@ -295,7 +296,7 @@ xfs_filestream_lookup_ag(
 	 * Set the starting AG using the rotor for inode32, otherwise
 	 * use the directory inode's AG.
 	 */
-	if (mp->m_flags & XFS_MOUNT_32BITINODES) {
+	if (xfs_is_inode32(mp)) {
 		xfs_agnumber_t	 rotorstep = xfs_rotorstep;
 		startag = (mp->m_agfrotor / rotorstep) % mp->m_sb.sb_agcount;
 		mp->m_agfrotor = (mp->m_agfrotor + 1) %

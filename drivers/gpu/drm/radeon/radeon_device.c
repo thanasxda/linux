@@ -38,6 +38,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
+#include <drm/drm_framebuffer.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/radeon_drm.h>
 
@@ -406,7 +407,7 @@ void radeon_doorbell_free(struct radeon_device *rdev, u32 doorbell)
 
 /*
  * radeon_wb_*()
- * Writeback is the the method by which the the GPU updates special pages
+ * Writeback is the method by which the GPU updates special pages
  * in memory with the status of certain GPU events (fences, ring pointers,
  * etc.).
  */
@@ -785,7 +786,7 @@ int radeon_dummy_page_init(struct radeon_device *rdev)
 	if (rdev->dummy_page.page == NULL)
 		return -ENOMEM;
 	rdev->dummy_page.addr = dma_map_page(&rdev->pdev->dev, rdev->dummy_page.page,
-					0, PAGE_SIZE, PCI_DMA_BIDIRECTIONAL);
+					0, PAGE_SIZE, DMA_BIDIRECTIONAL);
 	if (dma_mapping_error(&rdev->pdev->dev, rdev->dummy_page.addr)) {
 		dev_err(&rdev->pdev->dev, "Failed to DMA MAP the dummy page\n");
 		__free_page(rdev->dummy_page.page);
@@ -808,8 +809,8 @@ void radeon_dummy_page_fini(struct radeon_device *rdev)
 {
 	if (rdev->dummy_page.page == NULL)
 		return;
-	pci_unmap_page(rdev->pdev, rdev->dummy_page.addr,
-			PAGE_SIZE, PCI_DMA_BIDIRECTIONAL);
+	dma_unmap_page(&rdev->pdev->dev, rdev->dummy_page.addr, PAGE_SIZE,
+		       DMA_BIDIRECTIONAL);
 	__free_page(rdev->dummy_page.page);
 	rdev->dummy_page.page = NULL;
 }
@@ -1067,34 +1068,22 @@ void radeon_combios_fini(struct radeon_device *rdev)
 /**
  * radeon_vga_set_decode - enable/disable vga decode
  *
- * @cookie: radeon_device pointer
+ * @pdev: PCI device
  * @state: enable/disable vga decode
  *
  * Enable/disable vga decode (all asics).
  * Returns VGA resource flags.
  */
-static unsigned int radeon_vga_set_decode(void *cookie, bool state)
+static unsigned int radeon_vga_set_decode(struct pci_dev *pdev, bool state)
 {
-	struct radeon_device *rdev = cookie;
+	struct drm_device *dev = pci_get_drvdata(pdev);
+	struct radeon_device *rdev = dev->dev_private;
 	radeon_vga_set_state(rdev, state);
 	if (state)
 		return VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM |
 		       VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
 	else
 		return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
-}
-
-/**
- * radeon_check_pot_argument - check that argument is a power of two
- *
- * @arg: value to check
- *
- * Validates that a certain argument is a power of two (all asics).
- * Returns true if argument is valid.
- */
-static bool radeon_check_pot_argument(int arg)
-{
-	return (arg & (arg - 1)) == 0;
 }
 
 /**
@@ -1125,7 +1114,7 @@ static int radeon_gart_size_auto(enum radeon_family family)
 static void radeon_check_arguments(struct radeon_device *rdev)
 {
 	/* vramlimit must be a power of two */
-	if (!radeon_check_pot_argument(radeon_vram_limit)) {
+	if (radeon_vram_limit != 0 && !is_power_of_2(radeon_vram_limit)) {
 		dev_warn(rdev->dev, "vram limit (%d) must be a power of 2\n",
 				radeon_vram_limit);
 		radeon_vram_limit = 0;
@@ -1139,7 +1128,7 @@ static void radeon_check_arguments(struct radeon_device *rdev)
 		dev_warn(rdev->dev, "gart size (%d) too small\n",
 				radeon_gart_size);
 		radeon_gart_size = radeon_gart_size_auto(rdev->family);
-	} else if (!radeon_check_pot_argument(radeon_gart_size)) {
+	} else if (!is_power_of_2(radeon_gart_size)) {
 		dev_warn(rdev->dev, "gart size (%d) must be a power of 2\n",
 				radeon_gart_size);
 		radeon_gart_size = radeon_gart_size_auto(rdev->family);
@@ -1162,7 +1151,7 @@ static void radeon_check_arguments(struct radeon_device *rdev)
 		break;
 	}
 
-	if (!radeon_check_pot_argument(radeon_vm_size)) {
+	if (!is_power_of_2(radeon_vm_size)) {
 		dev_warn(rdev->dev, "VM size (%d) must be a power of 2\n",
 			 radeon_vm_size);
 		radeon_vm_size = 4;
@@ -1218,7 +1207,7 @@ static void radeon_check_arguments(struct radeon_device *rdev)
  * @pdev: pci dev pointer
  * @state: vga_switcheroo state
  *
- * Callback for the switcheroo driver.  Suspends or resumes the
+ * Callback for the switcheroo driver.  Suspends or resumes
  * the asics before or after it is powered up using ACPI methods.
  */
 static void radeon_switcheroo_set_state(struct pci_dev *pdev, enum vga_switcheroo_state state)
@@ -1323,6 +1312,7 @@ int radeon_device_init(struct radeon_device *rdev,
 	mutex_init(&rdev->pm.mutex);
 	mutex_init(&rdev->gpu_clock_mutex);
 	mutex_init(&rdev->srbm_mutex);
+	mutex_init(&rdev->audio.component_mutex);
 	init_rwsem(&rdev->pm.mclk_lock);
 	init_rwsem(&rdev->exclusive_lock);
 	init_waitqueue_head(&rdev->irq.vblank_queue);
@@ -1434,7 +1424,7 @@ int radeon_device_init(struct radeon_device *rdev,
 	/* if we have > 1 VGA cards, then disable the radeon VGA resources */
 	/* this will fail for cards that aren't VGA class devices, just
 	 * ignore it */
-	vga_client_register(rdev->pdev, rdev, NULL, radeon_vga_set_decode);
+	vga_client_register(rdev->pdev, radeon_vga_set_decode);
 
 	if (rdev->flags & RADEON_IS_PX)
 		runtime = true;
@@ -1449,7 +1439,6 @@ int radeon_device_init(struct radeon_device *rdev,
 		goto failed;
 
 	radeon_gem_debugfs_init(rdev);
-	radeon_mst_debugfs_init(rdev);
 
 	if (rdev->flags & RADEON_IS_AGP && !rdev->accel_working) {
 		/* Acceleration not working on AGP card try again
@@ -1462,6 +1451,8 @@ int radeon_device_init(struct radeon_device *rdev,
 		if (r)
 			goto failed;
 	}
+
+	radeon_audio_component_init(rdev);
 
 	r = radeon_ib_ring_tests(rdev);
 	if (r)
@@ -1525,12 +1516,13 @@ void radeon_device_fini(struct radeon_device *rdev)
 	rdev->shutdown = true;
 	/* evict vram memory */
 	radeon_bo_evict_vram(rdev);
+	radeon_audio_component_fini(rdev);
 	radeon_fini(rdev);
 	if (!pci_is_thunderbolt_attached(rdev->pdev))
 		vga_switcheroo_unregister_client(rdev->pdev);
 	if (rdev->flags & RADEON_IS_PX)
 		vga_switcheroo_fini_domain_pm_ops(rdev->dev);
-	vga_client_register(rdev->pdev, NULL, NULL, NULL);
+	vga_client_unregister(rdev->pdev);
 	if (rdev->rio_mem)
 		pci_iounmap(rdev->pdev, rdev->rio_mem);
 	rdev->rio_mem = NULL;
@@ -1616,6 +1608,9 @@ int radeon_suspend_kms(struct drm_device *dev, bool suspend,
 		if (r) {
 			/* delay GPU reset to resume */
 			radeon_fence_driver_force_completion(rdev, i);
+		} else {
+			/* finish executing delayed work */
+			flush_delayed_work(&rdev->fence_drv[i].lockup_work);
 		}
 	}
 

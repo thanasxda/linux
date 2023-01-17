@@ -1918,7 +1918,7 @@ static int bnx2i_queue_scsi_cmd_resp(struct iscsi_session *session,
 
 	spin_unlock(&session->back_lock);
 
-	p = &per_cpu(bnx2i_percpu, blk_mq_rq_cpu(sc->request));
+	p = &per_cpu(bnx2i_percpu, blk_mq_rq_cpu(scsi_cmd_to_rq(sc)));
 	spin_lock(&p->p_work_lock);
 	if (unlikely(!p->iothread)) {
 		rc = -EINVAL;
@@ -1977,7 +1977,7 @@ static int bnx2i_process_new_cqes(struct bnx2i_conn *bnx2i_conn)
 		if (nopin->cq_req_sn != qp->cqe_exp_seq_sn)
 			break;
 
-		if (unlikely(test_bit(ISCSI_SUSPEND_BIT, &conn->suspend_rx))) {
+		if (unlikely(test_bit(ISCSI_CONN_FLAG_SUSPEND_RX, &conn->flags))) {
 			if (nopin->op_code == ISCSI_OP_NOOP_IN &&
 			    nopin->itt == (u16) RESERVED_ITT) {
 				printk(KERN_ALERT "bnx2i: Unsolicited "
@@ -2398,7 +2398,7 @@ static void bnx2i_process_conn_destroy_cmpl(struct bnx2i_hba *hba,
 	}
 
 	if (hba != ep->hba) {
-		printk(KERN_ALERT "conn destroy- error hba mis-match\n");
+		printk(KERN_ALERT "conn destroy- error hba mismatch\n");
 		return;
 	}
 
@@ -2432,7 +2432,7 @@ static void bnx2i_process_ofld_cmpl(struct bnx2i_hba *hba,
 	}
 
 	if (hba != ep->hba) {
-		printk(KERN_ALERT "ofld_cmpl: error hba mis-match\n");
+		printk(KERN_ALERT "ofld_cmpl: error hba mismatch\n");
 		return;
 	}
 

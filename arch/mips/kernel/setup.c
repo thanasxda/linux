@@ -37,10 +37,12 @@
 #include <asm/cdmm.h>
 #include <asm/cpu.h>
 #include <asm/debug.h>
+#include <asm/mmzone.h>
 #include <asm/sections.h>
 #include <asm/setup.h>
 #include <asm/smp-ops.h>
 #include <asm/prom.h>
+#include <asm/fw/fw.h>
 
 #ifdef CONFIG_MIPS_ELF_APPENDED_DTB
 char __section(".appended_dtb") __appended_dtb[0x100000];
@@ -344,6 +346,11 @@ static int __init early_parse_mem(char *p)
 {
 	phys_addr_t start, size;
 
+	if (!p) {
+		pr_err("mem parameter is empty, do nothing\n");
+		return -EINVAL;
+	}
+
 	/*
 	 * If a user specifies memory size, we
 	 * blow away any automatically generated
@@ -359,7 +366,10 @@ static int __init early_parse_mem(char *p)
 	if (*p == '@')
 		start = memparse(p + 1, &p);
 
-	memblock_add(start, size);
+	if (IS_ENABLED(CONFIG_NUMA))
+		memblock_add_node(start, size, pa_to_nid(start), MEMBLOCK_NONE);
+	else
+		memblock_add(start, size);
 
 	return 0;
 }
@@ -452,8 +462,9 @@ static void __init mips_parse_crashkernel(void)
 		return;
 
 	if (crash_base <= 0) {
-		crash_base = memblock_find_in_range(CRASH_ALIGN, CRASH_ADDR_MAX,
-							crash_size, CRASH_ALIGN);
+		crash_base = memblock_phys_alloc_range(crash_size, CRASH_ALIGN,
+						       CRASH_ALIGN,
+						       CRASH_ADDR_MAX);
 		if (!crash_base) {
 			pr_warn("crashkernel reservation failed - No suitable area found.\n");
 			return;
@@ -461,8 +472,9 @@ static void __init mips_parse_crashkernel(void)
 	} else {
 		unsigned long long start;
 
-		start = memblock_find_in_range(crash_base, crash_base + crash_size,
-						crash_size, 1);
+		start = memblock_phys_alloc_range(crash_size, 1,
+						  crash_base,
+						  crash_base + crash_size);
 		if (start != crash_base) {
 			pr_warn("Invalid memory region reserved for crash kernel\n");
 			return;
@@ -552,7 +564,7 @@ static void __init bootcmdline_init(void)
 	 * unmodified.
 	 */
 	if (IS_ENABLED(CONFIG_CMDLINE_OVERRIDE)) {
-		strlcpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+		strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
 		return;
 	}
 
@@ -564,7 +576,7 @@ static void __init bootcmdline_init(void)
 	 * boot_command_line to undo anything early_init_dt_scan_chosen() did.
 	 */
 	if (IS_ENABLED(CONFIG_MIPS_CMDLINE_BUILTIN_EXTEND))
-		strlcpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+		strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
 	else
 		boot_command_line[0] = 0;
 
@@ -626,7 +638,7 @@ static void __init arch_mem_init(char **cmdline_p)
 	memblock_set_bottom_up(true);
 
 	bootcmdline_init();
-	strlcpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
+	strscpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = command_line;
 
 	parse_early_param();
@@ -656,10 +668,6 @@ static void __init arch_mem_init(char **cmdline_p)
 	mips_reserve_vmcore();
 
 	mips_parse_crashkernel();
-#ifdef CONFIG_KEXEC
-	if (crashk_res.start != crashk_res.end)
-		memblock_reserve(crashk_res.start, resource_size(&crashk_res));
-#endif
 	device_tree_init();
 
 	/*
@@ -743,11 +751,29 @@ static void __init prefill_possible_map(void)
 	for (; i < NR_CPUS; i++)
 		set_cpu_possible(i, false);
 
-	nr_cpu_ids = possible;
+	set_nr_cpu_ids(possible);
 }
 #else
 static inline void prefill_possible_map(void) {}
 #endif
+
+static void __init setup_rng_seed(void)
+{
+	char *rng_seed_hex = fw_getenv("rngseed");
+	u8 rng_seed[512];
+	size_t len;
+
+	if (!rng_seed_hex)
+		return;
+
+	len = min(sizeof(rng_seed), strlen(rng_seed_hex) / 2);
+	if (hex2bin(rng_seed, rng_seed_hex, len))
+		return;
+
+	add_bootloader_randomness(rng_seed, len);
+	memzero_explicit(rng_seed, len);
+	memzero_explicit(rng_seed_hex, len * 2);
+}
 
 void __init setup_arch(char **cmdline_p)
 {
@@ -779,6 +805,8 @@ void __init setup_arch(char **cmdline_p)
 	paging_init();
 
 	memblock_dump_all();
+
+	setup_rng_seed();
 }
 
 unsigned long kernelsp[NR_CPUS];
@@ -805,7 +833,7 @@ early_param("coherentio", setcoherentio);
 
 static int __init setnocoherentio(char *str)
 {
-	dma_default_coherent = true;
+	dma_default_coherent = false;
 	pr_info("Software DMA cache coherency (command line)\n");
 	return 0;
 }

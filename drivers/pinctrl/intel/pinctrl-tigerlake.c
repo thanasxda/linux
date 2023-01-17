@@ -31,25 +31,25 @@
 		.gpio_base = (g),			\
 	}
 
-#define TGL_COMMUNITY(b, s, e, pl, ho, g)		\
-	{						\
-		.barno = (b),				\
-		.padown_offset = TGL_PAD_OWN,		\
-		.padcfglock_offset = (pl),		\
-		.hostown_offset = (ho),			\
-		.is_offset = TGL_GPI_IS,		\
-		.ie_offset = TGL_GPI_IE,		\
-		.pin_base = (s),			\
-		.npins = ((e) - (s) + 1),		\
-		.gpps = (g),				\
-		.ngpps = ARRAY_SIZE(g),			\
+#define TGL_COMMUNITY(b, s, e, g, v)				\
+	{							\
+		.barno = (b),					\
+		.padown_offset = TGL_PAD_OWN,			\
+		.padcfglock_offset = TGL_##v##_PADCFGLOCK,	\
+		.hostown_offset = TGL_##v##_HOSTSW_OWN,		\
+		.is_offset = TGL_GPI_IS,			\
+		.ie_offset = TGL_GPI_IE,			\
+		.pin_base = (s),				\
+		.npins = ((e) - (s) + 1),			\
+		.gpps = (g),					\
+		.ngpps = ARRAY_SIZE(g),				\
 	}
 
 #define TGL_LP_COMMUNITY(b, s, e, g)			\
-	TGL_COMMUNITY(b, s, e, TGL_LP_PADCFGLOCK, TGL_LP_HOSTSW_OWN, g)
+	TGL_COMMUNITY(b, s, e, g, LP)
 
 #define TGL_H_COMMUNITY(b, s, e, g)			\
-	TGL_COMMUNITY(b, s, e, TGL_H_PADCFGLOCK, TGL_H_HOSTSW_OWN, g)
+	TGL_COMMUNITY(b, s, e, g, H)
 
 /* Tiger Lake-LP */
 static const struct pinctrl_pin_desc tgllp_pins[] = {
@@ -749,7 +749,6 @@ static const struct acpi_device_id tgl_pinctrl_acpi_match[] = {
 	{ "INT34C5", (kernel_ulong_t)&tgllp_soc_data },
 	{ "INT34C6", (kernel_ulong_t)&tglh_soc_data },
 	{ "INTC1055", (kernel_ulong_t)&tgllp_soc_data },
-	{ "INTC1057", (kernel_ulong_t)&tgllp_soc_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, tgl_pinctrl_acpi_match);

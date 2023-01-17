@@ -46,7 +46,6 @@
 #include <linux/pci.h>
 
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_irq.h>
 #include <drm/drm_vblank.h>
 #include <drm/amdgpu_drm.h>
 #include <drm/drm_drv.h>
@@ -102,41 +101,6 @@ const char *soc15_ih_clientid_name[] = {
 };
 
 /**
- * amdgpu_hotplug_work_func - work handler for display hotplug event
- *
- * @work: work struct pointer
- *
- * This is the hotplug event work handler (all ASICs).
- * The work gets scheduled from the IRQ handler if there
- * was a hotplug interrupt.  It walks through the connector table
- * and calls hotplug handler for each connector. After this, it sends
- * a DRM hotplug event to alert userspace.
- *
- * This design approach is required in order to defer hotplug event handling
- * from the IRQ handler to a work handler because hotplug handler has to use
- * mutexes which cannot be locked in an IRQ handler (since &mutex_lock may
- * sleep).
- */
-static void amdgpu_hotplug_work_func(struct work_struct *work)
-{
-	struct amdgpu_device *adev = container_of(work, struct amdgpu_device,
-						  hotplug_work);
-	struct drm_device *dev = adev_to_drm(adev);
-	struct drm_mode_config *mode_config = &dev->mode_config;
-	struct drm_connector *connector;
-	struct drm_connector_list_iter iter;
-
-	mutex_lock(&mode_config->mutex);
-	drm_connector_list_iter_begin(dev, &iter);
-	drm_for_each_connector_iter(connector, &iter)
-		amdgpu_connector_hotplug(connector);
-	drm_connector_list_iter_end(&iter);
-	mutex_unlock(&mode_config->mutex);
-	/* Just fire off a uevent and let userspace tell us what to do */
-	drm_helper_hpd_irq_event(dev);
-}
-
-/**
  * amdgpu_irq_disable_all - disable *all* interrupts
  *
  * @adev: amdgpu device pointer
@@ -184,7 +148,7 @@ void amdgpu_irq_disable_all(struct amdgpu_device *adev)
  * Returns:
  * result of handling the IRQ, as defined by &irqreturn_t
  */
-irqreturn_t amdgpu_irq_handler(int irq, void *arg)
+static irqreturn_t amdgpu_irq_handler(int irq, void *arg)
 {
 	struct drm_device *dev = (struct drm_device *) arg;
 	struct amdgpu_device *adev = drm_to_adev(dev);
@@ -194,20 +158,7 @@ irqreturn_t amdgpu_irq_handler(int irq, void *arg)
 	if (ret == IRQ_HANDLED)
 		pm_runtime_mark_last_busy(dev->dev);
 
-	/* For the hardware that cannot enable bif ring for both ras_controller_irq
-         * and ras_err_evnet_athub_irq ih cookies, the driver has to poll status
-	 * register to check whether the interrupt is triggered or not, and properly
-	 * ack the interrupt if it is there
-	 */
-	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__PCIE_BIF)) {
-		if (adev->nbio.ras_funcs &&
-		    adev->nbio.ras_funcs->handle_ras_controller_intr_no_bifring)
-			adev->nbio.ras_funcs->handle_ras_controller_intr_no_bifring(adev);
-
-		if (adev->nbio.ras_funcs &&
-		    adev->nbio.ras_funcs->handle_ras_err_event_athub_intr_no_bifring)
-			adev->nbio.ras_funcs->handle_ras_err_event_athub_intr_no_bifring(adev);
-	}
+	amdgpu_ras_interrupt_fatal_error_handler(adev);
 
 	return ret;
 }
@@ -307,6 +258,7 @@ static void amdgpu_restore_msix(struct amdgpu_device *adev)
 int amdgpu_irq_init(struct amdgpu_device *adev)
 {
 	int r = 0;
+	unsigned int irq;
 
 	spin_lock_init(&adev->irq.lock);
 
@@ -330,34 +282,23 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 		}
 	}
 
-	if (!amdgpu_device_has_dc_support(adev)) {
-		if (!adev->enable_virtual_display)
-			/* Disable vblank IRQs aggressively for power-saving */
-			/* XXX: can this be enabled for DC? */
-			adev_to_drm(adev)->vblank_disable_immediate = true;
-
-		r = drm_vblank_init(adev_to_drm(adev), adev->mode_info.num_crtc);
-		if (r)
-			return r;
-
-		/* Pre-DCE11 */
-		INIT_WORK(&adev->hotplug_work,
-				amdgpu_hotplug_work_func);
-	}
-
 	INIT_WORK(&adev->irq.ih1_work, amdgpu_irq_handle_ih1);
 	INIT_WORK(&adev->irq.ih2_work, amdgpu_irq_handle_ih2);
 	INIT_WORK(&adev->irq.ih_soft_work, amdgpu_irq_handle_ih_soft);
 
-	adev->irq.installed = true;
-	/* Use vector 0 for MSI-X */
-	r = drm_irq_install(adev_to_drm(adev), pci_irq_vector(adev->pdev, 0));
-	if (r) {
-		adev->irq.installed = false;
-		if (!amdgpu_device_has_dc_support(adev))
-			flush_work(&adev->hotplug_work);
+	/* Use vector 0 for MSI-X. */
+	r = pci_irq_vector(adev->pdev, 0);
+	if (r < 0)
 		return r;
-	}
+	irq = r;
+
+	/* PCI devices require shared interrupts. */
+	r = request_irq(irq, amdgpu_irq_handler, IRQF_SHARED, adev_to_drm(adev)->driver->name,
+			adev_to_drm(adev));
+	if (r)
+		return r;
+	adev->irq.installed = true;
+	adev->irq.irq = irq;
 	adev_to_drm(adev)->max_vblank_count = 0x00ffffff;
 
 	DRM_DEBUG("amdgpu: irq initialized.\n");
@@ -368,13 +309,10 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 void amdgpu_irq_fini_hw(struct amdgpu_device *adev)
 {
 	if (adev->irq.installed) {
-		drm_irq_uninstall(&adev->ddev);
+		free_irq(adev->irq.irq, adev_to_drm(adev));
 		adev->irq.installed = false;
 		if (adev->irq.msi_enabled)
 			pci_free_irq_vectors(adev->pdev);
-
-		if (!amdgpu_device_has_dc_support(adev))
-			flush_work(&adev->hotplug_work);
 	}
 
 	amdgpu_ih_ring_fini(adev, &adev->irq.ih_soft);
@@ -384,7 +322,7 @@ void amdgpu_irq_fini_hw(struct amdgpu_device *adev)
 }
 
 /**
- * amdgpu_irq_fini - shut down interrupt handling
+ * amdgpu_irq_fini_sw - shut down interrupt handling
  *
  * @adev: amdgpu device pointer
  *
@@ -502,7 +440,7 @@ void amdgpu_irq_dispatch(struct amdgpu_device *adev,
 
 	} else if ((client_id == AMDGPU_IRQ_CLIENTID_LEGACY) &&
 		   adev->irq.virq[src_id]) {
-		generic_handle_irq(irq_find_mapping(adev->irq.domain, src_id));
+		generic_handle_domain_irq(adev->irq.domain, src_id);
 
 	} else if (!adev->irq.client[client_id].sources) {
 		DRM_DEBUG("Unregistered interrupt client_id: %d src_id: %d\n",
@@ -522,6 +460,9 @@ void amdgpu_irq_dispatch(struct amdgpu_device *adev,
 	/* Send it to amdkfd as well if it isn't already handled */
 	if (!handled)
 		amdgpu_amdkfd_interrupt(adev, entry.iv_entry);
+
+	if (amdgpu_ih_ts_after(ih->processed_timestamp, entry.timestamp))
+		ih->processed_timestamp = entry.timestamp;
 }
 
 /**
@@ -584,7 +525,7 @@ void amdgpu_irq_gpu_reset_resume_helper(struct amdgpu_device *adev)
 {
 	int i, j, k;
 
-	if (amdgpu_sriov_vf(adev))
+	if (amdgpu_sriov_vf(adev) || amdgpu_passthrough(adev))
 		amdgpu_restore_msix(adev);
 
 	for (i = 0; i < AMDGPU_IRQ_CLIENTID_MAX; ++i) {
@@ -617,7 +558,7 @@ void amdgpu_irq_gpu_reset_resume_helper(struct amdgpu_device *adev)
 int amdgpu_irq_get(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 		   unsigned type)
 {
-	if (!adev_to_drm(adev)->irq_enabled)
+	if (!adev->irq.installed)
 		return -ENOENT;
 
 	if (type >= src->num_types)
@@ -647,7 +588,7 @@ int amdgpu_irq_get(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 int amdgpu_irq_put(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 		   unsigned type)
 {
-	if (!adev_to_drm(adev)->irq_enabled)
+	if (!adev->irq.installed)
 		return -ENOENT;
 
 	if (type >= src->num_types)
@@ -678,7 +619,7 @@ int amdgpu_irq_put(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 bool amdgpu_irq_enabled(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 			unsigned type)
 {
-	if (!adev_to_drm(adev)->irq_enabled)
+	if (!adev->irq.installed)
 		return false;
 
 	if (type >= src->num_types)

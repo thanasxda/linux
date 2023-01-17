@@ -56,8 +56,6 @@ endif
 
 endif
 
-head-y                 := arch/sparc/kernel/head_$(BITS).o
-
 libs-y                 += arch/sparc/prom/
 libs-y                 += arch/sparc/lib/
 
@@ -72,10 +70,7 @@ image zImage uImage tftpboot.img vmlinux.aout: vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
 install:
-	$(Q)$(MAKE) $(build)=$(boot) $@
-
-archclean:
-	$(Q)$(MAKE) $(clean)=$(boot)
+	$(call cmd,install)
 
 archheaders:
 	$(Q)$(MAKE) $(build)=arch/sparc/kernel/syscalls all

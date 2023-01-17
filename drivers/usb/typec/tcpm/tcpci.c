@@ -13,10 +13,9 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/usb/pd.h>
+#include <linux/usb/tcpci.h>
 #include <linux/usb/tcpm.h>
 #include <linux/usb/typec.h>
-
-#include "tcpci.h"
 
 #define	PD_RETRY_COUNT_DEFAULT			3
 #define	PD_RETRY_COUNT_3_0_OR_HIGHER		2
@@ -27,11 +26,6 @@
 #define	VPPS_NEW_MIN_PERCENT			95
 #define	VPPS_VALID_MIN_MV			100
 #define	VSINKDISCONNECT_PD_MIN_PERCENT		90
-
-#define tcpc_presenting_rd(reg, cc) \
-	(!(TCPC_ROLE_CTRL_DRP & (reg)) && \
-	 (((reg) & (TCPC_ROLE_CTRL_## cc ##_MASK << TCPC_ROLE_CTRL_## cc ##_SHIFT)) == \
-	  (TCPC_ROLE_CTRL_CC_RD << TCPC_ROLE_CTRL_## cc ##_SHIFT)))
 
 struct tcpci {
 	struct device *dev;
@@ -75,8 +69,24 @@ static int tcpci_write16(struct tcpci *tcpci, unsigned int reg, u16 val)
 static int tcpci_set_cc(struct tcpc_dev *tcpc, enum typec_cc_status cc)
 {
 	struct tcpci *tcpci = tcpc_to_tcpci(tcpc);
+	bool vconn_pres;
+	enum typec_cc_polarity polarity = TYPEC_POLARITY_CC1;
 	unsigned int reg;
 	int ret;
+
+	ret = regmap_read(tcpci->regmap, TCPC_POWER_STATUS, &reg);
+	if (ret < 0)
+		return ret;
+
+	vconn_pres = !!(reg & TCPC_POWER_STATUS_VCONN_PRES);
+	if (vconn_pres) {
+		ret = regmap_read(tcpci->regmap, TCPC_TCPC_CTRL, &reg);
+		if (ret < 0)
+			return ret;
+
+		if (reg & TCPC_TCPC_CTRL_ORIENTATION)
+			polarity = TYPEC_POLARITY_CC2;
+	}
 
 	switch (cc) {
 	case TYPEC_CC_RA:
@@ -110,6 +120,16 @@ static int tcpci_set_cc(struct tcpc_dev *tcpc, enum typec_cc_status cc)
 		reg = (TCPC_ROLE_CTRL_CC_OPEN << TCPC_ROLE_CTRL_CC1_SHIFT) |
 			(TCPC_ROLE_CTRL_CC_OPEN << TCPC_ROLE_CTRL_CC2_SHIFT);
 		break;
+	}
+
+	if (vconn_pres) {
+		if (polarity == TYPEC_POLARITY_CC2) {
+			reg &= ~(TCPC_ROLE_CTRL_CC1_MASK << TCPC_ROLE_CTRL_CC1_SHIFT);
+			reg |= (TCPC_ROLE_CTRL_CC_OPEN << TCPC_ROLE_CTRL_CC1_SHIFT);
+		} else {
+			reg &= ~(TCPC_ROLE_CTRL_CC2_MASK << TCPC_ROLE_CTRL_CC2_SHIFT);
+			reg |= (TCPC_ROLE_CTRL_CC_OPEN << TCPC_ROLE_CTRL_CC2_SHIFT);
+		}
 	}
 
 	ret = regmap_write(tcpci->regmap, TCPC_ROLE_CTRL, reg);
@@ -193,23 +213,6 @@ static int tcpci_start_toggling(struct tcpc_dev *tcpc,
 			    TCPC_CMD_LOOK4CONNECTION);
 }
 
-static enum typec_cc_status tcpci_to_typec_cc(unsigned int cc, bool sink)
-{
-	switch (cc) {
-	case 0x1:
-		return sink ? TYPEC_CC_RP_DEF : TYPEC_CC_RA;
-	case 0x2:
-		return sink ? TYPEC_CC_RP_1_5 : TYPEC_CC_RD;
-	case 0x3:
-		if (sink)
-			return TYPEC_CC_RP_3_0;
-		fallthrough;
-	case 0x0:
-	default:
-		return TYPEC_CC_OPEN;
-	}
-}
-
 static int tcpci_get_cc(struct tcpc_dev *tcpc,
 			enum typec_cc_status *cc1, enum typec_cc_status *cc2)
 {
@@ -258,7 +261,7 @@ static int tcpci_set_polarity(struct tcpc_dev *tcpc,
 	 * When port has drp toggling enabled, ROLE_CONTROL would only have the initial
 	 * terminations for the toggling and does not indicate the final cc
 	 * terminations when ConnectionResult is 0 i.e. drp toggling stops and
-	 * the connection is resolbed. Infer port role from TCPC_CC_STATUS based on the
+	 * the connection is resolved. Infer port role from TCPC_CC_STATUS based on the
 	 * terminations seen. The port role is then used to set the cc terminations.
 	 */
 	if (reg & TCPC_ROLE_CTRL_DRP) {
@@ -696,7 +699,7 @@ irqreturn_t tcpci_irq(struct tcpci *tcpci)
 		tcpm_pd_receive(tcpci->port, &msg);
 	}
 
-	if (status & TCPC_ALERT_EXTENDED_STATUS) {
+	if (tcpci->data->vbus_vsafe0v && (status & TCPC_ALERT_EXTENDED_STATUS)) {
 		ret = regmap_read(tcpci->regmap, TCPC_EXTENDED_STATUS, &raw);
 		if (!ret && (raw & TCPC_EXTENDED_STATUS_VSAFE0V))
 			tcpm_vbus_change(tcpci->port);
@@ -791,8 +794,10 @@ struct tcpci *tcpci_register_port(struct device *dev, struct tcpci_data *data)
 		return ERR_PTR(err);
 
 	tcpci->port = tcpm_register_port(tcpci->dev, &tcpci->tcpc);
-	if (IS_ERR(tcpci->port))
+	if (IS_ERR(tcpci->port)) {
+		fwnode_handle_put(tcpci->tcpc.fwnode);
 		return ERR_CAST(tcpci->port);
+	}
 
 	return tcpci;
 }
@@ -801,11 +806,11 @@ EXPORT_SYMBOL_GPL(tcpci_register_port);
 void tcpci_unregister_port(struct tcpci *tcpci)
 {
 	tcpm_unregister_port(tcpci->port);
+	fwnode_handle_put(tcpci->tcpc.fwnode);
 }
 EXPORT_SYMBOL_GPL(tcpci_unregister_port);
 
-static int tcpci_probe(struct i2c_client *client,
-		       const struct i2c_device_id *i2c_id)
+static int tcpci_probe(struct i2c_client *client)
 {
 	struct tcpci_chip *chip;
 	int err;
@@ -843,7 +848,7 @@ static int tcpci_probe(struct i2c_client *client,
 	return 0;
 }
 
-static int tcpci_remove(struct i2c_client *client)
+static void tcpci_remove(struct i2c_client *client)
 {
 	struct tcpci_chip *chip = i2c_get_clientdata(client);
 	int err;
@@ -851,11 +856,9 @@ static int tcpci_remove(struct i2c_client *client)
 	/* Disable chip interrupts before unregistering port */
 	err = tcpci_write16(chip->tcpci, TCPC_ALERT_MASK, 0);
 	if (err < 0)
-		return err;
+		dev_warn(&client->dev, "Failed to disable irqs (%pe)\n", ERR_PTR(err));
 
 	tcpci_unregister_port(chip->tcpci);
-
-	return 0;
 }
 
 static const struct i2c_device_id tcpci_id[] = {
@@ -877,7 +880,7 @@ static struct i2c_driver tcpci_i2c_driver = {
 		.name = "tcpci",
 		.of_match_table = of_match_ptr(tcpci_of_match),
 	},
-	.probe = tcpci_probe,
+	.probe_new = tcpci_probe,
 	.remove = tcpci_remove,
 	.id_table = tcpci_id,
 };

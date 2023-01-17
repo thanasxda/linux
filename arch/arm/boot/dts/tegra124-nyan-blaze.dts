@@ -15,12 +15,16 @@
 		     "google,nyan-blaze-rev0", "google,nyan-blaze",
 		     "google,nyan", "nvidia,tegra124";
 
-	panel: panel {
-		compatible = "samsung,ltn140at29-301";
-
-		power-supply = <&vdd_3v3_panel>;
-		backlight = <&backlight>;
-		ddc-i2c-bus = <&dpaux>;
+	host1x@50000000 {
+		dpaux@545c0000 {
+			aux-bus {
+				panel: panel {
+					compatible = "samsung,ltn140at29-301";
+					power-supply = <&vdd_3v3_panel>;
+					backlight = <&backlight>;
+				};
+			};
+		};
 	};
 
 	sound {
@@ -34,7 +38,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinmux_default>;
 
-		pinmux_default: common {
+		pinmux_default: pinmux {
 			clk_32k_out_pa0 {
 				nvidia,pins = "clk_32k_out_pa0";
 				nvidia,pull = <TEGRA_PIN_PULL_NONE>;

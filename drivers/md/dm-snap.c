@@ -141,11 +141,6 @@ struct dm_snapshot {
 	 * for them to be committed.
 	 */
 	struct bio_list bios_queued_during_merge;
-
-	/*
-	 * Flush data after merge.
-	 */
-	struct bio flush_bio;
 };
 
 /*
@@ -1127,17 +1122,6 @@ shut:
 
 static void error_bios(struct bio *bio);
 
-static int flush_data(struct dm_snapshot *s)
-{
-	struct bio *flush_bio = &s->flush_bio;
-
-	bio_reset(flush_bio);
-	bio_set_dev(flush_bio, s->origin->bdev);
-	flush_bio->bi_opf = REQ_OP_WRITE | REQ_PREFLUSH;
-
-	return submit_bio_wait(flush_bio);
-}
-
 static void merge_callback(int read_err, unsigned long write_err, void *context)
 {
 	struct dm_snapshot *s = context;
@@ -1151,7 +1135,7 @@ static void merge_callback(int read_err, unsigned long write_err, void *context)
 		goto shut;
 	}
 
-	if (flush_data(s) < 0) {
+	if (blkdev_issue_flush(s->origin->bdev) < 0) {
 		DMERR("Flush after merge failed: shutting down merge");
 		goto shut;
 	}
@@ -1340,7 +1324,6 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	s->first_merging_chunk = 0;
 	s->num_merging_chunks = 0;
 	bio_list_init(&s->bios_queued_during_merge);
-	bio_init(&s->flush_bio, NULL, 0);
 
 	/* Allocate hash table for COW data */
 	if (init_hash_tables(s)) {
@@ -1527,8 +1510,6 @@ static void snapshot_dtr(struct dm_target *ti)
 	mempool_exit(&s->pending_pool);
 
 	dm_exception_store_destroy(s->store);
-
-	bio_uninit(&s->flush_bio);
 
 	dm_put_device(ti, s->cow);
 
@@ -2045,7 +2026,7 @@ static int snapshot_map(struct dm_target *ti, struct bio *bio)
 	/*
 	 * Write to snapshot - higher level takes care of RW/RO
 	 * flags so we should only get this if we are
-	 * writeable.
+	 * writable.
 	 */
 	if (bio_data_dir(bio) == WRITE) {
 		pe = __lookup_pending_exception(s, chunk);
@@ -2390,6 +2371,16 @@ static void snapshot_status(struct dm_target *ti, status_type_t type,
 				DMEMIT(" discard_passdown_origin");
 		}
 		break;
+
+	case STATUSTYPE_IMA:
+		DMEMIT_TARGET_NAME_VERSION(ti->type);
+		DMEMIT(",snap_origin_name=%s", snap->origin->name);
+		DMEMIT(",snap_cow_name=%s", snap->cow->name);
+		DMEMIT(",snap_valid=%c", snap->valid ? 'y' : 'n');
+		DMEMIT(",snap_merge_failed=%c", snap->merge_failed ? 'y' : 'n');
+		DMEMIT(",snapshot_overflowed=%c", snap->snapshot_overflowed ? 'y' : 'n');
+		DMEMIT(";");
+		break;
 	}
 }
 
@@ -2733,6 +2724,9 @@ static void origin_status(struct dm_target *ti, status_type_t type,
 
 	case STATUSTYPE_TABLE:
 		snprintf(result, maxlen, "%s", o->dev->name);
+		break;
+	case STATUSTYPE_IMA:
+		result[0] = '\0';
 		break;
 	}
 }

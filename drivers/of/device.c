@@ -5,6 +5,7 @@
 #include <linux/of_device.h>
 #include <linux/of_address.h>
 #include <linux/of_iommu.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/dma-direct.h> /* for bus_dma_region */
 #include <linux/dma-map-ops.h>
 #include <linux/init.h>
@@ -27,7 +28,7 @@
 const struct of_device_id *of_match_device(const struct of_device_id *matches,
 					   const struct device *dev)
 {
-	if ((!matches) || (!dev->of_node))
+	if (!matches || !dev->of_node || dev->of_node_reused)
 		return NULL;
 	return of_match_node(matches, dev->of_node);
 }
@@ -52,6 +53,49 @@ int of_device_add(struct platform_device *ofdev)
 	return device_add(&ofdev->dev);
 }
 
+static void
+of_dma_set_restricted_buffer(struct device *dev, struct device_node *np)
+{
+	struct device_node *node, *of_node = dev->of_node;
+	int count, i;
+
+	if (!IS_ENABLED(CONFIG_DMA_RESTRICTED_POOL))
+		return;
+
+	count = of_property_count_elems_of_size(of_node, "memory-region",
+						sizeof(u32));
+	/*
+	 * If dev->of_node doesn't exist or doesn't contain memory-region, try
+	 * the OF node having DMA configuration.
+	 */
+	if (count <= 0) {
+		of_node = np;
+		count = of_property_count_elems_of_size(
+			of_node, "memory-region", sizeof(u32));
+	}
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(of_node, "memory-region", i);
+		/*
+		 * There might be multiple memory regions, but only one
+		 * restricted-dma-pool region is allowed.
+		 */
+		if (of_device_is_compatible(node, "restricted-dma-pool") &&
+		    of_device_is_available(node)) {
+			of_node_put(node);
+			break;
+		}
+		of_node_put(node);
+	}
+
+	/*
+	 * Attempt to initialize a restricted-dma-pool region if one was found.
+	 * Note that count can hold a negative error code.
+	 */
+	if (i < count && of_reserved_mem_device_init_by_idx(dev, of_node, i))
+		dev_warn(dev, "failed to initialise \"restricted-dma-pool\" memory node\n");
+}
+
 /**
  * of_dma_configure_id - Setup DMA configuration
  * @dev:	Device to apply DMA configuration
@@ -72,12 +116,19 @@ int of_dma_configure_id(struct device *dev, struct device_node *np,
 {
 	const struct iommu_ops *iommu;
 	const struct bus_dma_region *map = NULL;
+	struct device_node *bus_np;
 	u64 dma_start = 0;
 	u64 mask, end, size = 0;
 	bool coherent;
 	int ret;
 
-	ret = of_dma_get_range(np, &map);
+	if (np == dev->of_node)
+		bus_np = __of_get_dma_parent(np);
+	else
+		bus_np = of_node_get(np);
+
+	ret = of_dma_get_range(bus_np, &map);
+	of_node_put(bus_np);
 	if (ret < 0) {
 		/*
 		 * For legacy reasons, we have to assume some devices need
@@ -164,6 +215,9 @@ int of_dma_configure_id(struct device *dev, struct device_node *np,
 		iommu ? " " : " not ");
 
 	arch_setup_dma_ops(dev, dma_start, size, iommu, coherent);
+
+	if (!iommu)
+		of_dma_set_restricted_buffer(dev, np);
 
 	return 0;
 }
@@ -278,10 +332,10 @@ EXPORT_SYMBOL_GPL(of_device_modalias);
 
 /**
  * of_device_uevent - Display OF related uevent information
- * @dev:	Device to apply DMA configuration
- * @env:	Kernel object's userspace event reference
+ * @dev:	Device to display the uevent information for
+ * @env:	Kernel object's userspace event reference to fill up
  */
-void of_device_uevent(struct device *dev, struct kobj_uevent_env *env)
+void of_device_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
 	const char *compat, *type;
 	struct alias_prop *app;

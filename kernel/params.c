@@ -243,6 +243,24 @@ STANDARD_PARAM_DEF(ulong,	unsigned long,		"%lu",		kstrtoul);
 STANDARD_PARAM_DEF(ullong,	unsigned long long,	"%llu",		kstrtoull);
 STANDARD_PARAM_DEF(hexint,	unsigned int,		"%#08x", 	kstrtouint);
 
+int param_set_uint_minmax(const char *val, const struct kernel_param *kp,
+		unsigned int min, unsigned int max)
+{
+	unsigned int num;
+	int ret;
+
+	if (!val)
+		return -EINVAL;
+	ret = kstrtouint(val, 0, &num);
+	if (ret)
+		return ret;
+	if (num < min || num > max)
+		return -EINVAL;
+	*((unsigned int *)kp->arg) = num;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(param_set_uint_minmax);
+
 int param_set_charp(const char *val, const struct kernel_param *kp)
 {
 	if (strlen(val) > 1024) {
@@ -908,9 +926,9 @@ static const struct sysfs_ops module_sysfs_ops = {
 	.store = module_attr_store,
 };
 
-static int uevent_filter(struct kset *kset, struct kobject *kobj)
+static int uevent_filter(const struct kobject *kobj)
 {
-	struct kobj_type *ktype = get_ktype(kobj);
+	const struct kobj_type *ktype = get_ktype(kobj);
 
 	if (ktype == &module_ktype)
 		return 1;
@@ -922,7 +940,6 @@ static const struct kset_uevent_ops module_uevent_ops = {
 };
 
 struct kset *module_kset;
-int module_sysfs_initialized;
 
 static void module_kobj_release(struct kobject *kobj)
 {
@@ -936,7 +953,11 @@ struct kobj_type module_ktype = {
 };
 
 /*
- * param_sysfs_init - wrapper for built-in params support
+ * param_sysfs_init - create "module" kset
+ *
+ * This must be done before the initramfs is unpacked and
+ * request_module() thus becomes possible, because otherwise the
+ * module load would fail in mod_sysfs_init.
  */
 static int __init param_sysfs_init(void)
 {
@@ -946,13 +967,25 @@ static int __init param_sysfs_init(void)
 			__FILE__, __LINE__);
 		return -ENOMEM;
 	}
-	module_sysfs_initialized = 1;
+
+	return 0;
+}
+subsys_initcall(param_sysfs_init);
+
+/*
+ * param_sysfs_builtin_init - add sysfs version and parameter
+ * attributes for built-in modules
+ */
+static int __init param_sysfs_builtin_init(void)
+{
+	if (!module_kset)
+		return -ENOMEM;
 
 	version_sysfs_builtin();
 	param_sysfs_builtin();
 
 	return 0;
 }
-subsys_initcall(param_sysfs_init);
+late_initcall(param_sysfs_builtin_init);
 
 #endif /* CONFIG_SYSFS */

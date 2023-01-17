@@ -10,10 +10,15 @@
 #ifndef BNXT_PTP_H
 #define BNXT_PTP_H
 
+#include <linux/ptp_clock_kernel.h>
+#include <linux/timecounter.h>
+
 #define BNXT_PTP_GRC_WIN	6
 #define BNXT_PTP_GRC_WIN_BASE	0x6000
 
 #define BNXT_MAX_PHC_DRIFT	31000000
+#define BNXT_CYCLES_SHIFT	23
+#define BNXT_DEVCLK_FREQ	1000000
 #define BNXT_LO_TIMER_MASK	0x0000ffffffffUL
 #define BNXT_HI_TIMER_MASK	0xffff00000000UL
 
@@ -22,11 +27,62 @@
 				 PORT_TS_QUERY_REQ_ENABLES_TS_REQ_TIMEOUT | \
 				 PORT_TS_QUERY_REQ_ENABLES_PTP_HDR_OFFSET)
 
+struct pps_pin {
+	u8 event;
+	u8 usage;
+	u8 state;
+};
+
+#define TSIO_PIN_VALID(pin) ((pin) >= 0 && (pin) < (BNXT_MAX_TSIO_PINS))
+
+#define EVENT_DATA2_PPS_EVENT_TYPE(data2)				\
+	((data2) & ASYNC_EVENT_CMPL_PPS_TIMESTAMP_EVENT_DATA2_EVENT_TYPE)
+
+#define EVENT_DATA2_PPS_PIN_NUM(data2)					\
+	(((data2) &							\
+	  ASYNC_EVENT_CMPL_PPS_TIMESTAMP_EVENT_DATA2_PIN_NUMBER_MASK) >>\
+	 ASYNC_EVENT_CMPL_PPS_TIMESTAMP_EVENT_DATA2_PIN_NUMBER_SFT)
+
+#define BNXT_DATA2_UPPER_MSK						\
+	ASYNC_EVENT_CMPL_PPS_TIMESTAMP_EVENT_DATA2_PPS_TIMESTAMP_UPPER_MASK
+
+#define BNXT_DATA2_UPPER_SFT						\
+	(32 -								\
+	 ASYNC_EVENT_CMPL_PPS_TIMESTAMP_EVENT_DATA2_PPS_TIMESTAMP_UPPER_SFT)
+
+#define BNXT_DATA1_LOWER_MSK						\
+	ASYNC_EVENT_CMPL_PPS_TIMESTAMP_EVENT_DATA1_PPS_TIMESTAMP_LOWER_MASK
+
+#define BNXT_DATA1_LOWER_SFT						\
+	  ASYNC_EVENT_CMPL_PPS_TIMESTAMP_EVENT_DATA1_PPS_TIMESTAMP_LOWER_SFT
+
+#define EVENT_PPS_TS(data2, data1)					\
+	(((u64)((data2) & BNXT_DATA2_UPPER_MSK) << BNXT_DATA2_UPPER_SFT) |\
+	 (((data1) & BNXT_DATA1_LOWER_MSK) >> BNXT_DATA1_LOWER_SFT))
+
+#define BNXT_PPS_PIN_DISABLE	0
+#define BNXT_PPS_PIN_ENABLE	1
+#define BNXT_PPS_PIN_NONE	0
+#define BNXT_PPS_PIN_PPS_IN	1
+#define BNXT_PPS_PIN_PPS_OUT	2
+#define BNXT_PPS_PIN_SYNC_IN	3
+#define BNXT_PPS_PIN_SYNC_OUT	4
+
+#define BNXT_PPS_EVENT_INTERNAL	1
+#define BNXT_PPS_EVENT_EXTERNAL	2
+
+struct bnxt_pps {
+	u8 num_pins;
+#define BNXT_MAX_TSIO_PINS	4
+	struct pps_pin pins[BNXT_MAX_TSIO_PINS];
+};
+
 struct bnxt_ptp_cfg {
 	struct ptp_clock_info	ptp_info;
 	struct ptp_clock	*ptp_clock;
 	struct cyclecounter	cc;
 	struct timecounter	tc;
+	struct bnxt_pps		pps_info;
 	/* serialize timecounter access */
 	spinlock_t		ptp_lock;
 	struct sk_buff		*tx_skb;
@@ -34,8 +90,9 @@ struct bnxt_ptp_cfg {
 	u64			old_time;
 	unsigned long		next_period;
 	unsigned long		next_overflow_check;
-	/* 48-bit PHC overflows in 78 hours.  Check overflow every 19 hours. */
-	#define BNXT_PHC_OVERFLOW_PERIOD	(19 * 3600 * HZ)
+	u32			cmult;
+	/* a 23b shift cyclecounter will overflow in ~36 mins.  Check overflow every 18 mins. */
+	#define BNXT_PHC_OVERFLOW_PERIOD	(18 * 60 * HZ)
 
 	u16			tx_seqid;
 	u16			tx_hdr_off;
@@ -59,6 +116,7 @@ struct bnxt_ptp_cfg {
 					 BNXT_PTP_MSG_PDELAY_RESP)
 	u8			tx_tstamp_en:1;
 	int			rx_filter;
+	u32			tstamp_filters;
 
 	u32			refclk_regs[2];
 	u32			refclk_mapped_regs[2];
@@ -77,10 +135,16 @@ do {						\
 #endif
 
 int bnxt_ptp_parse(struct sk_buff *skb, u16 *seq_id, u16 *hdr_off);
+void bnxt_ptp_update_current_time(struct bnxt *bp);
+void bnxt_ptp_pps_event(struct bnxt *bp, u32 data1, u32 data2);
+void bnxt_ptp_cfg_tstamp_filters(struct bnxt *bp);
+void bnxt_ptp_reapply_pps(struct bnxt *bp);
 int bnxt_hwtstamp_set(struct net_device *dev, struct ifreq *ifr);
 int bnxt_hwtstamp_get(struct net_device *dev, struct ifreq *ifr);
 int bnxt_get_tx_ts_p5(struct bnxt *bp, struct sk_buff *skb);
 int bnxt_get_rx_ts_p5(struct bnxt *bp, u64 *ts, u32 pkt_ts);
-int bnxt_ptp_init(struct bnxt *bp);
+void bnxt_ptp_rtc_timecounter_init(struct bnxt_ptp_cfg *ptp, u64 ns);
+int bnxt_ptp_init_rtc(struct bnxt *bp, bool phc_cfg);
+int bnxt_ptp_init(struct bnxt *bp, bool phc_cfg);
 void bnxt_ptp_clear(struct bnxt *bp);
 #endif

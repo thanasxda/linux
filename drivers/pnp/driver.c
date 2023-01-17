@@ -123,7 +123,7 @@ fail:
 	return error;
 }
 
-static int pnp_device_remove(struct device *dev)
+static void pnp_device_remove(struct device *dev)
 {
 	struct pnp_dev *pnp_dev = to_pnp_dev(dev);
 	struct pnp_driver *drv = pnp_dev->driver;
@@ -139,7 +139,6 @@ static int pnp_device_remove(struct device *dev)
 		pnp_disable_dev(pnp_dev);
 
 	pnp_device_detach(pnp_dev);
-	return 0;
 }
 
 static void pnp_device_shutdown(struct device *dev)
@@ -172,7 +171,7 @@ static int __pnp_bus_suspend(struct device *dev, pm_message_t state)
 
 	if (pnp_drv->driver.pm && pnp_drv->driver.pm->suspend) {
 		error = pnp_drv->driver.pm->suspend(dev);
-		suspend_report_result(pnp_drv->driver.pm->suspend, error);
+		suspend_report_result(dev, pnp_drv->driver.pm->suspend, error);
 		if (error)
 			return error;
 	}
@@ -183,7 +182,8 @@ static int __pnp_bus_suspend(struct device *dev, pm_message_t state)
 			return error;
 	}
 
-	if (pnp_can_disable(pnp_dev)) {
+	/* can_write is necessary to be able to re-start the device on resume */
+	if (pnp_can_disable(pnp_dev) && pnp_can_write(pnp_dev)) {
 		error = pnp_stop_dev(pnp_dev);
 		if (error)
 			return error;

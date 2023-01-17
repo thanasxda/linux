@@ -38,9 +38,8 @@ static struct hns3_dbg_dentry_info hns3_dbg_dentry[] = {
 	},
 };
 
-static int hns3_dbg_bd_file_init(struct hnae3_handle *handle, unsigned int cmd);
-static int hns3_dbg_common_file_init(struct hnae3_handle *handle,
-				     unsigned int cmd);
+static int hns3_dbg_bd_file_init(struct hnae3_handle *handle, u32 cmd);
+static int hns3_dbg_common_file_init(struct hnae3_handle *handle, u32 cmd);
 
 static struct hns3_dbg_cmd_info hns3_dbg_cmd[] = {
 	{
@@ -107,6 +106,13 @@ static struct hns3_dbg_cmd_info hns3_dbg_cmd[] = {
 		.init = hns3_dbg_common_file_init,
 	},
 	{
+		.name = "qos_dscp_map",
+		.cmd = HNAE3_DBG_CMD_QOS_DSCP_MAP,
+		.dentry = HNS3_DBG_DENTRY_TM,
+		.buf_len = HNS3_DBG_READ_LEN,
+		.init = hns3_dbg_common_file_init,
+	},
+	{
 		.name = "qos_buf_cfg",
 		.cmd = HNAE3_DBG_CMD_QOS_BUF_CFG,
 		.dentry = HNS3_DBG_DENTRY_TM,
@@ -138,7 +144,7 @@ static struct hns3_dbg_cmd_info hns3_dbg_cmd[] = {
 		.name = "uc",
 		.cmd = HNAE3_DBG_CMD_MAC_UC,
 		.dentry = HNS3_DBG_DENTRY_MAC,
-		.buf_len = HNS3_DBG_READ_LEN,
+		.buf_len = HNS3_DBG_READ_LEN_128KB,
 		.init = hns3_dbg_common_file_init,
 	},
 	{
@@ -257,7 +263,7 @@ static struct hns3_dbg_cmd_info hns3_dbg_cmd[] = {
 		.name = "tqp",
 		.cmd = HNAE3_DBG_CMD_REG_TQP,
 		.dentry = HNS3_DBG_DENTRY_REG,
-		.buf_len = HNS3_DBG_READ_LEN,
+		.buf_len = HNS3_DBG_READ_LEN_128KB,
 		.init = hns3_dbg_common_file_init,
 	},
 	{
@@ -299,7 +305,7 @@ static struct hns3_dbg_cmd_info hns3_dbg_cmd[] = {
 		.name = "fd_tcam",
 		.cmd = HNAE3_DBG_CMD_FD_TCAM,
 		.dentry = HNS3_DBG_DENTRY_FD,
-		.buf_len = HNS3_DBG_READ_LEN,
+		.buf_len = HNS3_DBG_READ_LEN_1MB,
 		.init = hns3_dbg_common_file_init,
 	},
 	{
@@ -335,6 +341,20 @@ static struct hns3_dbg_cmd_info hns3_dbg_cmd[] = {
 		.cmd = HNAE3_DBG_CMD_UMV_INFO,
 		.dentry = HNS3_DBG_DENTRY_COMMON,
 		.buf_len = HNS3_DBG_READ_LEN,
+		.init = hns3_dbg_common_file_init,
+	},
+	{
+		.name = "page_pool_info",
+		.cmd = HNAE3_DBG_CMD_PAGE_POOL_INFO,
+		.dentry = HNS3_DBG_DENTRY_COMMON,
+		.buf_len = HNS3_DBG_READ_LEN,
+		.init = hns3_dbg_common_file_init,
+	},
+	{
+		.name = "coalesce_info",
+		.cmd = HNAE3_DBG_CMD_COAL_INFO,
+		.dentry = HNS3_DBG_DENTRY_COMMON,
+		.buf_len = HNS3_DBG_READ_LEN_1MB,
 		.init = hns3_dbg_common_file_init,
 	},
 };
@@ -382,8 +402,34 @@ static struct hns3_dbg_cap_info hns3_dbg_cap[] = {
 	}, {
 		.name = "support modify vlan filter state",
 		.cap_bit = HNAE3_DEV_SUPPORT_VLAN_FLTR_MDF_B,
+	}, {
+		.name = "support FEC statistics",
+		.cap_bit = HNAE3_DEV_SUPPORT_FEC_STATS_B,
+	}, {
+		.name = "support lane num",
+		.cap_bit = HNAE3_DEV_SUPPORT_LANE_NUM_B,
 	}
 };
+
+static const struct hns3_dbg_item coal_info_items[] = {
+	{ "VEC_ID", 2 },
+	{ "ALGO_STATE", 2 },
+	{ "PROFILE_ID", 2 },
+	{ "CQE_MODE", 2 },
+	{ "TUNE_STATE", 2 },
+	{ "STEPS_LEFT", 2 },
+	{ "STEPS_RIGHT", 2 },
+	{ "TIRED", 2 },
+	{ "SW_GL", 2 },
+	{ "SW_QL", 2 },
+	{ "HW_GL", 2 },
+	{ "HW_QL", 2 },
+};
+
+static const char * const dim_cqe_mode_str[] = { "EQE", "CQE" };
+static const char * const dim_state_str[] = { "START", "IN_PROG", "APPLY" };
+static const char * const
+dim_tune_stat_str[] = { "ON_TOP", "TIRED", "RIGHT", "LEFT" };
 
 static void hns3_dbg_fill_content(char *content, u16 len,
 				  const struct hns3_dbg_item *items,
@@ -404,6 +450,94 @@ static void hns3_dbg_fill_content(char *content, u16 len,
 
 	*pos++ = '\n';
 	*pos++ = '\0';
+}
+
+static void hns3_get_coal_info(struct hns3_enet_tqp_vector *tqp_vector,
+			       char **result, int i, bool is_tx)
+{
+	unsigned int gl_offset, ql_offset;
+	struct hns3_enet_coalesce *coal;
+	unsigned int reg_val;
+	unsigned int j = 0;
+	struct dim *dim;
+	bool ql_enable;
+
+	if (is_tx) {
+		coal = &tqp_vector->tx_group.coal;
+		dim = &tqp_vector->tx_group.dim;
+		gl_offset = HNS3_VECTOR_GL1_OFFSET;
+		ql_offset = HNS3_VECTOR_TX_QL_OFFSET;
+		ql_enable = tqp_vector->tx_group.coal.ql_enable;
+	} else {
+		coal = &tqp_vector->rx_group.coal;
+		dim = &tqp_vector->rx_group.dim;
+		gl_offset = HNS3_VECTOR_GL0_OFFSET;
+		ql_offset = HNS3_VECTOR_RX_QL_OFFSET;
+		ql_enable = tqp_vector->rx_group.coal.ql_enable;
+	}
+
+	sprintf(result[j++], "%d", i);
+	sprintf(result[j++], "%s", dim_state_str[dim->state]);
+	sprintf(result[j++], "%u", dim->profile_ix);
+	sprintf(result[j++], "%s", dim_cqe_mode_str[dim->mode]);
+	sprintf(result[j++], "%s",
+		dim_tune_stat_str[dim->tune_state]);
+	sprintf(result[j++], "%u", dim->steps_left);
+	sprintf(result[j++], "%u", dim->steps_right);
+	sprintf(result[j++], "%u", dim->tired);
+	sprintf(result[j++], "%u", coal->int_gl);
+	sprintf(result[j++], "%u", coal->int_ql);
+	reg_val = readl(tqp_vector->mask_addr + gl_offset) &
+		  HNS3_VECTOR_GL_MASK;
+	sprintf(result[j++], "%u", reg_val);
+	if (ql_enable) {
+		reg_val = readl(tqp_vector->mask_addr + ql_offset) &
+			  HNS3_VECTOR_QL_MASK;
+		sprintf(result[j++], "%u", reg_val);
+	} else {
+		sprintf(result[j++], "NA");
+	}
+}
+
+static void hns3_dump_coal_info(struct hnae3_handle *h, char *buf, int len,
+				int *pos, bool is_tx)
+{
+	char data_str[ARRAY_SIZE(coal_info_items)][HNS3_DBG_DATA_STR_LEN];
+	char *result[ARRAY_SIZE(coal_info_items)];
+	struct hns3_enet_tqp_vector *tqp_vector;
+	struct hns3_nic_priv *priv = h->priv;
+	char content[HNS3_DBG_INFO_LEN];
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(coal_info_items); i++)
+		result[i] = &data_str[i][0];
+
+	*pos += scnprintf(buf + *pos, len - *pos,
+			  "%s interrupt coalesce info:\n",
+			  is_tx ? "tx" : "rx");
+	hns3_dbg_fill_content(content, sizeof(content), coal_info_items,
+			      NULL, ARRAY_SIZE(coal_info_items));
+	*pos += scnprintf(buf + *pos, len - *pos, "%s", content);
+
+	for (i = 0; i < priv->vector_num; i++) {
+		tqp_vector = &priv->tqp_vector[i];
+		hns3_get_coal_info(tqp_vector, result, i, is_tx);
+		hns3_dbg_fill_content(content, sizeof(content), coal_info_items,
+				      (const char **)result,
+				      ARRAY_SIZE(coal_info_items));
+		*pos += scnprintf(buf + *pos, len - *pos, "%s", content);
+	}
+}
+
+static int hns3_dbg_coal_info(struct hnae3_handle *h, char *buf, int len)
+{
+	int pos = 0;
+
+	hns3_dump_coal_info(h, buf, len, &pos, true);
+	pos += scnprintf(buf + pos, len - pos, "\n");
+	hns3_dump_coal_info(h, buf, len, &pos, false);
+
+	return 0;
 }
 
 static const struct hns3_dbg_item tx_spare_info_items[] = {
@@ -441,12 +575,12 @@ static void hns3_dbg_tx_spare_info(struct hns3_enet_ring *ring, char *buf,
 
 	for (i = 0; i < ring_num; i++) {
 		j = 0;
-		sprintf(result[j++], "%8u", i);
-		sprintf(result[j++], "%9u", ring->tx_copybreak);
-		sprintf(result[j++], "%3u", tx_spare->len);
-		sprintf(result[j++], "%3u", tx_spare->next_to_use);
-		sprintf(result[j++], "%3u", tx_spare->next_to_clean);
-		sprintf(result[j++], "%3u", tx_spare->last_to_clean);
+		sprintf(result[j++], "%u", i);
+		sprintf(result[j++], "%u", ring->tx_copybreak);
+		sprintf(result[j++], "%u", tx_spare->len);
+		sprintf(result[j++], "%u", tx_spare->next_to_use);
+		sprintf(result[j++], "%u", tx_spare->next_to_clean);
+		sprintf(result[j++], "%u", tx_spare->last_to_clean);
 		sprintf(result[j++], "%pad", &tx_spare->dma);
 		hns3_dbg_fill_content(content, sizeof(content),
 				      tx_spare_info_items,
@@ -463,7 +597,7 @@ static const struct hns3_dbg_item rx_queue_info_items[] = {
 	{ "TAIL", 2 },
 	{ "HEAD", 2 },
 	{ "FBDNUM", 2 },
-	{ "PKTNUM", 2 },
+	{ "PKTNUM", 5 },
 	{ "COPYBREAK", 2 },
 	{ "RING_EN", 2 },
 	{ "RX_RING_EN", 2 },
@@ -477,35 +611,35 @@ static void hns3_dump_rx_queue_info(struct hns3_enet_ring *ring,
 	u32 base_add_l, base_add_h;
 	u32 j = 0;
 
-	sprintf(result[j++], "%8u", index);
+	sprintf(result[j++], "%u", index);
 
-	sprintf(result[j++], "%6u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_RX_RING_BD_NUM_REG));
 
-	sprintf(result[j++], "%6u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_RX_RING_BD_LEN_REG));
 
-	sprintf(result[j++], "%4u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_RX_RING_TAIL_REG));
 
-	sprintf(result[j++], "%4u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_RX_RING_HEAD_REG));
 
-	sprintf(result[j++], "%6u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_RX_RING_FBDNUM_REG));
 
-	sprintf(result[j++], "%6u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_RX_RING_PKTNUM_RECORD_REG));
-	sprintf(result[j++], "%9u", ring->rx_copybreak);
+	sprintf(result[j++], "%u", ring->rx_copybreak);
 
-	sprintf(result[j++], "%7s", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%s", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_EN_REG) ? "on" : "off");
 
 	if (hnae3_ae_dev_tqp_txrx_indep_supported(ae_dev))
-		sprintf(result[j++], "%10s", readl_relaxed(ring->tqp->io_base +
+		sprintf(result[j++], "%s", readl_relaxed(ring->tqp->io_base +
 			HNS3_RING_RX_EN_REG) ? "on" : "off");
 	else
-		sprintf(result[j++], "%10s", "NA");
+		sprintf(result[j++], "%s", "NA");
 
 	base_add_h = readl_relaxed(ring->tqp->io_base +
 					HNS3_RING_RX_RING_BASEADDR_H_REG);
@@ -566,7 +700,7 @@ static const struct hns3_dbg_item tx_queue_info_items[] = {
 	{ "HEAD", 2 },
 	{ "FBDNUM", 2 },
 	{ "OFFSET", 2 },
-	{ "PKTNUM", 2 },
+	{ "PKTNUM", 5 },
 	{ "RING_EN", 2 },
 	{ "TX_RING_EN", 2 },
 	{ "BASE_ADDR", 10 },
@@ -579,36 +713,36 @@ static void hns3_dump_tx_queue_info(struct hns3_enet_ring *ring,
 	u32 base_add_l, base_add_h;
 	u32 j = 0;
 
-	sprintf(result[j++], "%8u", index);
-	sprintf(result[j++], "%6u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", index);
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_TX_RING_BD_NUM_REG));
 
-	sprintf(result[j++], "%2u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_TX_RING_TC_REG));
 
-	sprintf(result[j++], "%4u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_TX_RING_TAIL_REG));
 
-	sprintf(result[j++], "%4u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_TX_RING_HEAD_REG));
 
-	sprintf(result[j++], "%6u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_TX_RING_FBDNUM_REG));
 
-	sprintf(result[j++], "%6u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_TX_RING_OFFSET_REG));
 
-	sprintf(result[j++], "%6u", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%u", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_TX_RING_PKTNUM_RECORD_REG));
 
-	sprintf(result[j++], "%7s", readl_relaxed(ring->tqp->io_base +
+	sprintf(result[j++], "%s", readl_relaxed(ring->tqp->io_base +
 		HNS3_RING_EN_REG) ? "on" : "off");
 
 	if (hnae3_ae_dev_tqp_txrx_indep_supported(ae_dev))
-		sprintf(result[j++], "%10s", readl_relaxed(ring->tqp->io_base +
+		sprintf(result[j++], "%s", readl_relaxed(ring->tqp->io_base +
 			HNS3_RING_TX_EN_REG) ? "on" : "off");
 	else
-		sprintf(result[j++], "%10s", "NA");
+		sprintf(result[j++], "%s", "NA");
 
 	base_add_h = readl_relaxed(ring->tqp->io_base +
 					HNS3_RING_TX_RING_BASEADDR_H_REG);
@@ -696,7 +830,7 @@ static int hns3_dbg_queue_map(struct hnae3_handle *h, char *buf, int len)
 		sprintf(result[j++], "%u", i);
 		sprintf(result[j++], "%u",
 			h->ae_algo->ops->get_global_queue_id(h, i));
-		sprintf(result[j++], "%u",
+		sprintf(result[j++], "%d",
 			priv->ring[i].tqp_vector->vector_irq);
 		hns3_dbg_fill_content(content, sizeof(content), queue_map_items,
 				      (const char **)result,
@@ -727,15 +861,15 @@ static void hns3_dump_rx_bd_info(struct hns3_nic_priv *priv,
 {
 	unsigned int j = 0;
 
-	sprintf(result[j++], "%5d", idx);
+	sprintf(result[j++], "%d", idx);
 	sprintf(result[j++], "%#x", le32_to_cpu(desc->rx.l234_info));
-	sprintf(result[j++], "%7u", le16_to_cpu(desc->rx.pkt_len));
-	sprintf(result[j++], "%4u", le16_to_cpu(desc->rx.size));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->rx.pkt_len));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->rx.size));
 	sprintf(result[j++], "%#x", le32_to_cpu(desc->rx.rss_hash));
-	sprintf(result[j++], "%5u", le16_to_cpu(desc->rx.fd_id));
-	sprintf(result[j++], "%8u", le16_to_cpu(desc->rx.vlan_tag));
-	sprintf(result[j++], "%15u", le16_to_cpu(desc->rx.o_dm_vlan_id_fb));
-	sprintf(result[j++], "%11u", le16_to_cpu(desc->rx.ot_vlan_tag));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->rx.fd_id));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->rx.vlan_tag));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->rx.o_dm_vlan_id_fb));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->rx.ot_vlan_tag));
 	sprintf(result[j++], "%#x", le32_to_cpu(desc->rx.bd_base_info));
 	if (test_bit(HNS3_NIC_STATE_RXD_ADV_LAYOUT_ENABLE, &priv->state)) {
 		u32 ol_info = le32_to_cpu(desc->rx.ol_info);
@@ -791,17 +925,17 @@ static int hns3_dbg_rx_bd_info(struct hns3_dbg_data *d, char *buf, int len)
 }
 
 static const struct hns3_dbg_item tx_bd_info_items[] = {
-	{ "BD_IDX", 5 },
-	{ "ADDRESS", 2 },
+	{ "BD_IDX", 2 },
+	{ "ADDRESS", 13 },
 	{ "VLAN_TAG", 2 },
 	{ "SIZE", 2 },
 	{ "T_CS_VLAN_TSO", 2 },
 	{ "OT_VLAN_TAG", 3 },
-	{ "TV", 2 },
-	{ "OLT_VLAN_LEN", 2},
-	{ "PAYLEN_OL4CS", 2},
-	{ "BD_FE_SC_VLD", 2},
-	{ "MSS_HW_CSUM", 0},
+	{ "TV", 5 },
+	{ "OLT_VLAN_LEN", 2 },
+	{ "PAYLEN_OL4CS", 2 },
+	{ "BD_FE_SC_VLD", 2 },
+	{ "MSS_HW_CSUM", 0 },
 };
 
 static void hns3_dump_tx_bd_info(struct hns3_nic_priv *priv,
@@ -809,19 +943,19 @@ static void hns3_dump_tx_bd_info(struct hns3_nic_priv *priv,
 {
 	unsigned int j = 0;
 
-	sprintf(result[j++], "%6d", idx);
+	sprintf(result[j++], "%d", idx);
 	sprintf(result[j++], "%#llx", le64_to_cpu(desc->addr));
-	sprintf(result[j++], "%5u", le16_to_cpu(desc->tx.vlan_tag));
-	sprintf(result[j++], "%5u", le16_to_cpu(desc->tx.send_size));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->tx.vlan_tag));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->tx.send_size));
 	sprintf(result[j++], "%#x",
 		le32_to_cpu(desc->tx.type_cs_vlan_tso_len));
-	sprintf(result[j++], "%5u", le16_to_cpu(desc->tx.outer_vlan_tag));
-	sprintf(result[j++], "%5u", le16_to_cpu(desc->tx.tv));
-	sprintf(result[j++], "%10u",
+	sprintf(result[j++], "%u", le16_to_cpu(desc->tx.outer_vlan_tag));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->tx.tv));
+	sprintf(result[j++], "%u",
 		le32_to_cpu(desc->tx.ol_type_vlan_len_msec));
 	sprintf(result[j++], "%#x", le32_to_cpu(desc->tx.paylen_ol4cs));
 	sprintf(result[j++], "%#x", le16_to_cpu(desc->tx.bdtp_fe_sc_vld_ra_ri));
-	sprintf(result[j++], "%5u", le16_to_cpu(desc->tx.mss_hw_csum));
+	sprintf(result[j++], "%u", le16_to_cpu(desc->tx.mss_hw_csum));
 }
 
 static int hns3_dbg_tx_bd_info(struct hns3_dbg_data *d, char *buf, int len)
@@ -868,7 +1002,7 @@ static void
 hns3_dbg_dev_caps(struct hnae3_handle *h, char *buf, int len, int *pos)
 {
 	struct hnae3_ae_dev *ae_dev = pci_get_drvdata(h->pdev);
-	static const char * const str[] = {"no", "yes"};
+	const char * const str[] = {"no", "yes"};
 	unsigned long *caps = ae_dev->caps;
 	u32 i, state;
 
@@ -925,6 +1059,12 @@ hns3_dbg_dev_specs(struct hnae3_handle *h, char *buf, int len, int *pos)
 			  dev_specs->max_tm_rate);
 	*pos += scnprintf(buf + *pos, len - *pos, "MAX QSET number: %u\n",
 			  dev_specs->max_qset_num);
+	*pos += scnprintf(buf + *pos, len - *pos, "umv size: %u\n",
+			  dev_specs->umv_size);
+	*pos += scnprintf(buf + *pos, len - *pos, "mc mac size: %u\n",
+			  dev_specs->mc_mac_size);
+	*pos += scnprintf(buf + *pos, len - *pos, "MAC statistics number: %u\n",
+			  dev_specs->mac_stats_num);
 }
 
 static int hns3_dbg_dev_info(struct hnae3_handle *h, char *buf, int len)
@@ -938,20 +1078,88 @@ static int hns3_dbg_dev_info(struct hnae3_handle *h, char *buf, int len)
 	return 0;
 }
 
-static int hns3_dbg_get_cmd_index(struct hnae3_handle *handle,
-				  const unsigned char *name, u32 *index)
+static const struct hns3_dbg_item page_pool_info_items[] = {
+	{ "QUEUE_ID", 2 },
+	{ "ALLOCATE_CNT", 2 },
+	{ "FREE_CNT", 6 },
+	{ "POOL_SIZE(PAGE_NUM)", 2 },
+	{ "ORDER", 2 },
+	{ "NUMA_ID", 2 },
+	{ "MAX_LEN", 2 },
+};
+
+static void hns3_dump_page_pool_info(struct hns3_enet_ring *ring,
+				     char **result, u32 index)
+{
+	u32 j = 0;
+
+	sprintf(result[j++], "%u", index);
+	sprintf(result[j++], "%u",
+		READ_ONCE(ring->page_pool->pages_state_hold_cnt));
+	sprintf(result[j++], "%d",
+		atomic_read(&ring->page_pool->pages_state_release_cnt));
+	sprintf(result[j++], "%u", ring->page_pool->p.pool_size);
+	sprintf(result[j++], "%u", ring->page_pool->p.order);
+	sprintf(result[j++], "%d", ring->page_pool->p.nid);
+	sprintf(result[j++], "%uK", ring->page_pool->p.max_len / 1024);
+}
+
+static int
+hns3_dbg_page_pool_info(struct hnae3_handle *h, char *buf, int len)
+{
+	char data_str[ARRAY_SIZE(page_pool_info_items)][HNS3_DBG_DATA_STR_LEN];
+	char *result[ARRAY_SIZE(page_pool_info_items)];
+	struct hns3_nic_priv *priv = h->priv;
+	char content[HNS3_DBG_INFO_LEN];
+	struct hns3_enet_ring *ring;
+	int pos = 0;
+	u32 i;
+
+	if (!priv->ring) {
+		dev_err(&h->pdev->dev, "priv->ring is NULL\n");
+		return -EFAULT;
+	}
+
+	if (!priv->ring[h->kinfo.num_tqps].page_pool) {
+		dev_err(&h->pdev->dev, "page pool is not initialized\n");
+		return -EFAULT;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(page_pool_info_items); i++)
+		result[i] = &data_str[i][0];
+
+	hns3_dbg_fill_content(content, sizeof(content), page_pool_info_items,
+			      NULL, ARRAY_SIZE(page_pool_info_items));
+	pos += scnprintf(buf + pos, len - pos, "%s", content);
+	for (i = 0; i < h->kinfo.num_tqps; i++) {
+		if (!test_bit(HNS3_NIC_STATE_INITED, &priv->state) ||
+		    test_bit(HNS3_NIC_STATE_RESETTING, &priv->state))
+			return -EPERM;
+		ring = &priv->ring[(u32)(i + h->kinfo.num_tqps)];
+		hns3_dump_page_pool_info(ring, result, i);
+		hns3_dbg_fill_content(content, sizeof(content),
+				      page_pool_info_items,
+				      (const char **)result,
+				      ARRAY_SIZE(page_pool_info_items));
+		pos += scnprintf(buf + pos, len - pos, "%s", content);
+	}
+
+	return 0;
+}
+
+static int hns3_dbg_get_cmd_index(struct hns3_dbg_data *dbg_data, u32 *index)
 {
 	u32 i;
 
 	for (i = 0; i < ARRAY_SIZE(hns3_dbg_cmd); i++) {
-		if (!strncmp(name, hns3_dbg_cmd[i].name,
-			     strlen(hns3_dbg_cmd[i].name))) {
+		if (hns3_dbg_cmd[i].cmd == dbg_data->cmd) {
 			*index = i;
 			return 0;
 		}
 	}
 
-	dev_err(&handle->pdev->dev, "unknown command(%s)\n", name);
+	dev_err(&dbg_data->handle->pdev->dev, "unknown command(%d)\n",
+		dbg_data->cmd);
 	return -EINVAL;
 }
 
@@ -979,6 +1187,14 @@ static const struct hns3_dbg_func hns3_dbg_cmd_func[] = {
 	{
 		.cmd = HNAE3_DBG_CMD_TX_QUEUE_INFO,
 		.dbg_dump = hns3_dbg_tx_queue_info,
+	},
+	{
+		.cmd = HNAE3_DBG_CMD_PAGE_POOL_INFO,
+		.dbg_dump = hns3_dbg_page_pool_info,
+	},
+	{
+		.cmd = HNAE3_DBG_CMD_COAL_INFO,
+		.dbg_dump = hns3_dbg_coal_info,
 	},
 };
 
@@ -1019,12 +1235,12 @@ static ssize_t hns3_dbg_read(struct file *filp, char __user *buffer,
 	u32 index;
 	int ret;
 
-	ret = hns3_dbg_get_cmd_index(handle, filp->f_path.dentry->d_iname,
-				     &index);
+	ret = hns3_dbg_get_cmd_index(dbg_data, &index);
 	if (ret)
 		return ret;
 
-	save_buf = &hns3_dbg_cmd[index].buf;
+	mutex_lock(&handle->dbgfs_lock);
+	save_buf = &handle->dbgfs_buf[index];
 
 	if (!test_bit(HNS3_NIC_STATE_INITED, &priv->state) ||
 	    test_bit(HNS3_NIC_STATE_RESETTING, &priv->state)) {
@@ -1036,15 +1252,15 @@ static ssize_t hns3_dbg_read(struct file *filp, char __user *buffer,
 		read_buf = *save_buf;
 	} else {
 		read_buf = kvzalloc(hns3_dbg_cmd[index].buf_len, GFP_KERNEL);
-		if (!read_buf)
-			return -ENOMEM;
+		if (!read_buf) {
+			ret = -ENOMEM;
+			goto out;
+		}
 
 		/* save the buffer addr until the last read operation */
 		*save_buf = read_buf;
-	}
 
-	/* get data ready for the first time to read */
-	if (!*ppos) {
+		/* get data ready for the first time to read */
 		ret = hns3_dbg_read_cmd(dbg_data, hns3_dbg_cmd[index].cmd,
 					read_buf, hns3_dbg_cmd[index].buf_len);
 		if (ret)
@@ -1053,8 +1269,10 @@ static ssize_t hns3_dbg_read(struct file *filp, char __user *buffer,
 
 	size = simple_read_from_buffer(buffer, count, ppos, read_buf,
 				       strlen(read_buf));
-	if (size > 0)
+	if (size > 0) {
+		mutex_unlock(&handle->dbgfs_lock);
 		return size;
+	}
 
 out:
 	/* free the buffer for the last read operation */
@@ -1063,6 +1281,7 @@ out:
 		*save_buf = NULL;
 	}
 
+	mutex_unlock(&handle->dbgfs_lock);
 	return ret;
 }
 
@@ -1090,6 +1309,7 @@ static int hns3_dbg_bd_file_init(struct hnae3_handle *handle, u32 cmd)
 		char name[HNS3_DBG_FILE_NAME_LEN];
 
 		data[i].handle = handle;
+		data[i].cmd = hns3_dbg_cmd[cmd].cmd;
 		data[i].qid = i;
 		sprintf(name, "%s%u", hns3_dbg_cmd[cmd].name, i);
 		debugfs_create_file(name, 0400, entry_dir, &data[i],
@@ -1110,6 +1330,7 @@ hns3_dbg_common_file_init(struct hnae3_handle *handle, u32 cmd)
 		return -ENOMEM;
 
 	data->handle = handle;
+	data->cmd = hns3_dbg_cmd[cmd].cmd;
 	entry_dir = hns3_dbg_dentry[hns3_dbg_cmd[cmd].dentry].dentry;
 	debugfs_create_file(hns3_dbg_cmd[cmd].name, 0400, entry_dir,
 			    data, &hns3_dbg_fops);
@@ -1124,6 +1345,13 @@ int hns3_dbg_init(struct hnae3_handle *handle)
 	int ret;
 	u32 i;
 
+	handle->dbgfs_buf = devm_kcalloc(&handle->pdev->dev,
+					 ARRAY_SIZE(hns3_dbg_cmd),
+					 sizeof(*handle->dbgfs_buf),
+					 GFP_KERNEL);
+	if (!handle->dbgfs_buf)
+		return -ENOMEM;
+
 	hns3_dbg_dentry[HNS3_DBG_DENTRY_COMMON].dentry =
 				debugfs_create_dir(name, hns3_dbgfs_root);
 	handle->hnae3_dbgfs = hns3_dbg_dentry[HNS3_DBG_DENTRY_COMMON].dentry;
@@ -1132,6 +1360,8 @@ int hns3_dbg_init(struct hnae3_handle *handle)
 		hns3_dbg_dentry[i].dentry =
 			debugfs_create_dir(hns3_dbg_dentry[i].name,
 					   handle->hnae3_dbgfs);
+
+	mutex_init(&handle->dbgfs_lock);
 
 	for (i = 0; i < ARRAY_SIZE(hns3_dbg_cmd); i++) {
 		if ((hns3_dbg_cmd[i].cmd == HNAE3_DBG_CMD_TM_NODES &&
@@ -1159,6 +1389,7 @@ int hns3_dbg_init(struct hnae3_handle *handle)
 	return 0;
 
 out:
+	mutex_destroy(&handle->dbgfs_lock);
 	debugfs_remove_recursive(handle->hnae3_dbgfs);
 	handle->hnae3_dbgfs = NULL;
 	return ret;
@@ -1169,11 +1400,12 @@ void hns3_dbg_uninit(struct hnae3_handle *handle)
 	u32 i;
 
 	for (i = 0; i < ARRAY_SIZE(hns3_dbg_cmd); i++)
-		if (hns3_dbg_cmd[i].buf) {
-			kvfree(hns3_dbg_cmd[i].buf);
-			hns3_dbg_cmd[i].buf = NULL;
+		if (handle->dbgfs_buf[i]) {
+			kvfree(handle->dbgfs_buf[i]);
+			handle->dbgfs_buf[i] = NULL;
 		}
 
+	mutex_destroy(&handle->dbgfs_lock);
 	debugfs_remove_recursive(handle->hnae3_dbgfs);
 	handle->hnae3_dbgfs = NULL;
 }

@@ -83,7 +83,29 @@ enum ct_entry_type {
 	CT_TYPE_PRE_CT,
 	CT_TYPE_NFT,
 	CT_TYPE_POST_CT,
+	_CT_TYPE_MAX,
 };
+
+enum nfp_nfp_layer_name {
+	FLOW_PAY_META_TCI =    0,
+	FLOW_PAY_INPORT,
+	FLOW_PAY_EXT_META,
+	FLOW_PAY_MAC_MPLS,
+	FLOW_PAY_L4,
+	FLOW_PAY_IPV4,
+	FLOW_PAY_IPV6,
+	FLOW_PAY_CT,
+	FLOW_PAY_GRE,
+	FLOW_PAY_QINQ,
+	FLOW_PAY_UDP_TUN,
+	FLOW_PAY_GENEVE_OPT,
+
+	_FLOW_PAY_LAYERS_MAX
+};
+
+/* NFP flow entry flags. */
+#define NFP_FL_ACTION_DO_NAT		BIT(0)
+#define NFP_FL_ACTION_DO_MANGLE		BIT(1)
 
 /**
  * struct nfp_fl_ct_flow_entry - Flow entry containing conntrack flow information
@@ -97,6 +119,7 @@ enum ct_entry_type {
  * @rule:	Reference to the original TC flow rule
  * @stats:	Used to cache stats for updating
  * @tun_offset: Used to indicate tunnel action offset in action list
+ * @flags:	Used to indicate flow flag like NAT which used by merge.
  */
 struct nfp_fl_ct_flow_entry {
 	unsigned long cookie;
@@ -109,6 +132,7 @@ struct nfp_fl_ct_flow_entry {
 	struct flow_rule *rule;
 	struct flow_stats stats;
 	u8 tun_offset;		// Set to NFP_FL_CT_NO_TUN if no tun
+	u8 flags;
 };
 
 /**
@@ -228,4 +252,12 @@ int nfp_fl_ct_del_flow(struct nfp_fl_ct_map_entry *ct_map_ent);
  */
 int nfp_fl_ct_handle_nft_flow(enum tc_setup_type type, void *type_data,
 			      void *cb_priv);
+
+/**
+ * nfp_fl_ct_stats() - Handle flower stats callbacks for ct flows
+ * @flow:	TC flower classifier offload structure.
+ * @ct_map_ent:	ct map entry for the flow that needs deleting
+ */
+int nfp_fl_ct_stats(struct flow_cls_offload *flow,
+		    struct nfp_fl_ct_map_entry *ct_map_ent);
 #endif

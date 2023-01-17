@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: LGPL-2.1
 /*
- *   fs/cifs/xattr.c
  *
  *   Copyright (c) International Business Machines  Corp., 2003, 2007
  *   Author(s): Steve French (sfrench@us.ibm.com)
@@ -176,11 +175,13 @@ static int cifs_xattr_set(const struct xattr_handler *handler,
 				switch (handler->flags) {
 				case XATTR_CIFS_NTSD_FULL:
 					aclflags = (CIFS_ACL_OWNER |
+						    CIFS_ACL_GROUP |
 						    CIFS_ACL_DACL |
 						    CIFS_ACL_SACL);
 					break;
 				case XATTR_CIFS_NTSD:
 					aclflags = (CIFS_ACL_OWNER |
+						    CIFS_ACL_GROUP |
 						    CIFS_ACL_DACL);
 					break;
 				case XATTR_CIFS_ACL:
@@ -199,30 +200,6 @@ static int cifs_xattr_set(const struct xattr_handler *handler,
 		}
 		break;
 	}
-
-	case XATTR_ACL_ACCESS:
-#ifdef CONFIG_CIFS_POSIX
-		if (!value)
-			goto out;
-		if (sb->s_flags & SB_POSIXACL)
-			rc = CIFSSMBSetPosixACL(xid, pTcon, full_path,
-				value, (const int)size,
-				ACL_TYPE_ACCESS, cifs_sb->local_nls,
-				cifs_remap(cifs_sb));
-#endif  /* CONFIG_CIFS_POSIX */
-		break;
-
-	case XATTR_ACL_DEFAULT:
-#ifdef CONFIG_CIFS_POSIX
-		if (!value)
-			goto out;
-		if (sb->s_flags & SB_POSIXACL)
-			rc = CIFSSMBSetPosixACL(xid, pTcon, full_path,
-				value, (const int)size,
-				ACL_TYPE_DEFAULT, cifs_sb->local_nls,
-				cifs_remap(cifs_sb));
-#endif  /* CONFIG_CIFS_POSIX */
-		break;
 	}
 
 out:
@@ -363,26 +340,6 @@ static int cifs_xattr_get(const struct xattr_handler *handler,
 		}
 		break;
 	}
-
-	case XATTR_ACL_ACCESS:
-#ifdef CONFIG_CIFS_POSIX
-		if (sb->s_flags & SB_POSIXACL)
-			rc = CIFSSMBGetPosixACL(xid, pTcon, full_path,
-				value, size, ACL_TYPE_ACCESS,
-				cifs_sb->local_nls,
-				cifs_remap(cifs_sb));
-#endif  /* CONFIG_CIFS_POSIX */
-		break;
-
-	case XATTR_ACL_DEFAULT:
-#ifdef CONFIG_CIFS_POSIX
-		if (sb->s_flags & SB_POSIXACL)
-			rc = CIFSSMBGetPosixACL(xid, pTcon, full_path,
-				value, size, ACL_TYPE_DEFAULT,
-				cifs_sb->local_nls,
-				cifs_remap(cifs_sb));
-#endif  /* CONFIG_CIFS_POSIX */
-		break;
 	}
 
 	/* We could add an additional check for streams ie
@@ -521,21 +478,6 @@ static const struct xattr_handler smb3_ntsd_full_xattr_handler = {
 	.set = cifs_xattr_set,
 };
 
-
-static const struct xattr_handler cifs_posix_acl_access_xattr_handler = {
-	.name = XATTR_NAME_POSIX_ACL_ACCESS,
-	.flags = XATTR_ACL_ACCESS,
-	.get = cifs_xattr_get,
-	.set = cifs_xattr_set,
-};
-
-static const struct xattr_handler cifs_posix_acl_default_xattr_handler = {
-	.name = XATTR_NAME_POSIX_ACL_DEFAULT,
-	.flags = XATTR_ACL_DEFAULT,
-	.get = cifs_xattr_get,
-	.set = cifs_xattr_set,
-};
-
 const struct xattr_handler *cifs_xattr_handlers[] = {
 	&cifs_user_xattr_handler,
 	&cifs_os2_xattr_handler,
@@ -545,7 +487,9 @@ const struct xattr_handler *cifs_xattr_handlers[] = {
 	&smb3_ntsd_xattr_handler, /* alias for above since avoiding "cifs" */
 	&cifs_cifs_ntsd_full_xattr_handler,
 	&smb3_ntsd_full_xattr_handler, /* alias for above since avoiding "cifs" */
-	&cifs_posix_acl_access_xattr_handler,
-	&cifs_posix_acl_default_xattr_handler,
+#ifdef CONFIG_FS_POSIX_ACL
+	&posix_acl_access_xattr_handler,
+	&posix_acl_default_xattr_handler,
+#endif
 	NULL
 };

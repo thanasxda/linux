@@ -26,10 +26,12 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_state_helper.h>
+#include <drm/drm_blend.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_device.h>
+#include <drm/drm_framebuffer.h>
 #include <drm/drm_plane.h>
 #include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
@@ -243,11 +245,36 @@ EXPORT_SYMBOL(drm_atomic_helper_crtc_destroy_state);
 void __drm_atomic_helper_plane_state_reset(struct drm_plane_state *plane_state,
 					   struct drm_plane *plane)
 {
+	u64 val;
+
 	plane_state->plane = plane;
 	plane_state->rotation = DRM_MODE_ROTATE_0;
 
 	plane_state->alpha = DRM_BLEND_ALPHA_OPAQUE;
 	plane_state->pixel_blend_mode = DRM_MODE_BLEND_PREMULTI;
+
+	if (plane->color_encoding_property) {
+		if (!drm_object_property_get_default_value(&plane->base,
+							   plane->color_encoding_property,
+							   &val))
+			plane_state->color_encoding = val;
+	}
+
+	if (plane->color_range_property) {
+		if (!drm_object_property_get_default_value(&plane->base,
+							   plane->color_range_property,
+							   &val))
+			plane_state->color_range = val;
+	}
+
+	if (plane->zpos_property) {
+		if (!drm_object_property_get_default_value(&plane->base,
+							   plane->zpos_property,
+							   &val)) {
+			plane_state->zpos = val;
+			plane_state->normalized_zpos = val;
+		}
+	}
 }
 EXPORT_SYMBOL(__drm_atomic_helper_plane_state_reset);
 
@@ -437,12 +464,12 @@ void drm_atomic_helper_connector_reset(struct drm_connector *connector)
 EXPORT_SYMBOL(drm_atomic_helper_connector_reset);
 
 /**
- * drm_atomic_helper_connector_tv_reset - Resets TV connector properties
+ * drm_atomic_helper_connector_tv_margins_reset - Resets TV connector properties
  * @connector: DRM connector
  *
  * Resets the TV-related properties attached to a connector.
  */
-void drm_atomic_helper_connector_tv_reset(struct drm_connector *connector)
+void drm_atomic_helper_connector_tv_margins_reset(struct drm_connector *connector)
 {
 	struct drm_cmdline_mode *cmdline = &connector->cmdline_mode;
 	struct drm_connector_state *state = connector->state;
@@ -452,7 +479,7 @@ void drm_atomic_helper_connector_tv_reset(struct drm_connector *connector)
 	state->tv.margins.top = cmdline->tv_margins.top;
 	state->tv.margins.bottom = cmdline->tv_margins.bottom;
 }
-EXPORT_SYMBOL(drm_atomic_helper_connector_tv_reset);
+EXPORT_SYMBOL(drm_atomic_helper_connector_tv_margins_reset);
 
 /**
  * __drm_atomic_helper_connector_duplicate_state - copy atomic connector state

@@ -57,7 +57,7 @@ static void rsa_pub_unmap(struct device *dev, struct rsa_edesc *edesc,
 			  struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct rsa_pub_pdb *pdb = &edesc->pdb.pub;
 
@@ -69,7 +69,7 @@ static void rsa_priv_f1_unmap(struct device *dev, struct rsa_edesc *edesc,
 			      struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct rsa_priv_f1_pdb *pdb = &edesc->pdb.priv_f1;
 
@@ -81,7 +81,7 @@ static void rsa_priv_f2_unmap(struct device *dev, struct rsa_edesc *edesc,
 			      struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct rsa_priv_f2_pdb *pdb = &edesc->pdb.priv_f2;
 	size_t p_sz = key->p_sz;
@@ -98,7 +98,7 @@ static void rsa_priv_f3_unmap(struct device *dev, struct rsa_edesc *edesc,
 			      struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct rsa_priv_f3_pdb *pdb = &edesc->pdb.priv_f3;
 	size_t p_sz = key->p_sz;
@@ -149,7 +149,7 @@ static void rsa_priv_f_done(struct device *dev, u32 *desc, u32 err,
 	struct akcipher_request *req = context;
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
 	struct caam_drv_private_jr *jrp = dev_get_drvdata(dev);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct caam_rsa_req_ctx *req_ctx = akcipher_request_ctx(req);
 	struct rsa_edesc *edesc;
@@ -242,7 +242,7 @@ static struct rsa_edesc *rsa_edesc_alloc(struct akcipher_request *req,
 					 size_t desclen)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct device *dev = ctx->dev;
 	struct caam_rsa_req_ctx *req_ctx = akcipher_request_ctx(req);
 	struct caam_rsa_key *key = &ctx->key;
@@ -371,7 +371,7 @@ static int akcipher_do_one_req(struct crypto_engine *engine, void *areq)
 						    base);
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
 	struct caam_rsa_req_ctx *req_ctx = akcipher_request_ctx(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct device *jrdev = ctx->dev;
 	u32 *desc = req_ctx->edesc->hw_desc;
 	int ret;
@@ -379,6 +379,9 @@ static int akcipher_do_one_req(struct crypto_engine *engine, void *areq)
 	req_ctx->edesc->bklog = true;
 
 	ret = caam_jr_enqueue(jrdev, desc, req_ctx->akcipher_op_done, req);
+
+	if (ret == -ENOSPC && engine->retry_support)
+		return ret;
 
 	if (ret != -EINPROGRESS) {
 		rsa_pub_unmap(jrdev, req_ctx->edesc, req);
@@ -396,7 +399,7 @@ static int set_rsa_pub_pdb(struct akcipher_request *req,
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
 	struct caam_rsa_req_ctx *req_ctx = akcipher_request_ctx(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct device *dev = ctx->dev;
 	struct rsa_pub_pdb *pdb = &edesc->pdb.pub;
@@ -441,7 +444,7 @@ static int set_rsa_priv_f1_pdb(struct akcipher_request *req,
 			       struct rsa_edesc *edesc)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct device *dev = ctx->dev;
 	struct rsa_priv_f1_pdb *pdb = &edesc->pdb.priv_f1;
@@ -488,7 +491,7 @@ static int set_rsa_priv_f2_pdb(struct akcipher_request *req,
 			       struct rsa_edesc *edesc)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct device *dev = ctx->dev;
 	struct rsa_priv_f2_pdb *pdb = &edesc->pdb.priv_f2;
@@ -565,7 +568,7 @@ static int set_rsa_priv_f3_pdb(struct akcipher_request *req,
 			       struct rsa_edesc *edesc)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct device *dev = ctx->dev;
 	struct rsa_priv_f3_pdb *pdb = &edesc->pdb.priv_f3;
@@ -661,7 +664,7 @@ static int akcipher_enqueue_req(struct device *jrdev,
 {
 	struct caam_drv_private_jr *jrpriv = dev_get_drvdata(jrdev);
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct caam_rsa_req_ctx *req_ctx = akcipher_request_ctx(req);
 	struct rsa_edesc *edesc = req_ctx->edesc;
@@ -704,7 +707,7 @@ static int akcipher_enqueue_req(struct device *jrdev,
 static int caam_rsa_enc(struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	struct device *jrdev = ctx->dev;
 	struct rsa_edesc *edesc;
@@ -743,7 +746,7 @@ init_fail:
 static int caam_rsa_dec_priv_f1(struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct device *jrdev = ctx->dev;
 	struct rsa_edesc *edesc;
 	int ret;
@@ -772,7 +775,7 @@ init_fail:
 static int caam_rsa_dec_priv_f2(struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct device *jrdev = ctx->dev;
 	struct rsa_edesc *edesc;
 	int ret;
@@ -801,7 +804,7 @@ init_fail:
 static int caam_rsa_dec_priv_f3(struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct device *jrdev = ctx->dev;
 	struct rsa_edesc *edesc;
 	int ret;
@@ -830,7 +833,7 @@ init_fail:
 static int caam_rsa_dec(struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 	int ret;
 
@@ -933,7 +936,7 @@ static int caam_rsa_check_key_length(unsigned int len)
 static int caam_rsa_set_pub_key(struct crypto_akcipher *tfm, const void *key,
 				unsigned int keylen)
 {
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct rsa_key raw_key = {NULL};
 	struct caam_rsa_key *rsa_key = &ctx->key;
 	int ret;
@@ -1035,7 +1038,7 @@ free_p:
 static int caam_rsa_set_priv_key(struct crypto_akcipher *tfm, const void *key,
 				 unsigned int keylen)
 {
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct rsa_key raw_key = {NULL};
 	struct caam_rsa_key *rsa_key = &ctx->key;
 	int ret;
@@ -1086,7 +1089,7 @@ err:
 
 static unsigned int caam_rsa_max_size(struct crypto_akcipher *tfm)
 {
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 
 	return ctx->key.n_sz;
 }
@@ -1094,7 +1097,9 @@ static unsigned int caam_rsa_max_size(struct crypto_akcipher *tfm)
 /* Per session pkc's driver context creation function */
 static int caam_rsa_init_tfm(struct crypto_akcipher *tfm)
 {
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
+
+	akcipher_set_reqsize(tfm, sizeof(struct caam_rsa_req_ctx));
 
 	ctx->dev = caam_jr_alloc();
 
@@ -1120,7 +1125,7 @@ static int caam_rsa_init_tfm(struct crypto_akcipher *tfm)
 /* Per session pkc's driver context cleanup function */
 static void caam_rsa_exit_tfm(struct crypto_akcipher *tfm)
 {
-	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx(tfm);
+	struct caam_rsa_ctx *ctx = akcipher_tfm_ctx_dma(tfm);
 	struct caam_rsa_key *key = &ctx->key;
 
 	dma_unmap_single(ctx->dev, ctx->padding_dma, CAAM_RSA_MAX_INPUT_SIZE -
@@ -1138,13 +1143,13 @@ static struct caam_akcipher_alg caam_rsa = {
 		.max_size = caam_rsa_max_size,
 		.init = caam_rsa_init_tfm,
 		.exit = caam_rsa_exit_tfm,
-		.reqsize = sizeof(struct caam_rsa_req_ctx),
 		.base = {
 			.cra_name = "rsa",
 			.cra_driver_name = "rsa-caam",
 			.cra_priority = 3000,
 			.cra_module = THIS_MODULE,
-			.cra_ctxsize = sizeof(struct caam_rsa_ctx),
+			.cra_ctxsize = sizeof(struct caam_rsa_ctx) +
+				       CRYPTO_DMA_PADDING,
 		},
 	}
 };
@@ -1153,16 +1158,27 @@ static struct caam_akcipher_alg caam_rsa = {
 int caam_pkc_init(struct device *ctrldev)
 {
 	struct caam_drv_private *priv = dev_get_drvdata(ctrldev);
-	u32 pk_inst;
+	u32 pk_inst, pkha;
 	int err;
 	init_done = false;
 
 	/* Determine public key hardware accelerator presence. */
-	if (priv->era < 10)
+	if (priv->era < 10) {
 		pk_inst = (rd_reg32(&priv->ctrl->perfmon.cha_num_ls) &
 			   CHA_ID_LS_PK_MASK) >> CHA_ID_LS_PK_SHIFT;
-	else
-		pk_inst = rd_reg32(&priv->ctrl->vreg.pkha) & CHA_VER_NUM_MASK;
+	} else {
+		pkha = rd_reg32(&priv->ctrl->vreg.pkha);
+		pk_inst = pkha & CHA_VER_NUM_MASK;
+
+		/*
+		 * Newer CAAMs support partially disabled functionality. If this is the
+		 * case, the number is non-zero, but this bit is set to indicate that
+		 * no encryption or decryption is supported. Only signing and verifying
+		 * is supported.
+		 */
+		if (pkha & CHA_VER_MISC_PKHA_NO_CRYPT)
+			pk_inst = 0;
+	}
 
 	/* Do not register algorithms if PKHA is not present. */
 	if (!pk_inst)

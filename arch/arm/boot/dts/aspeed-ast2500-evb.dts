@@ -5,7 +5,7 @@
 
 / {
 	model = "AST2500 EVB";
-	compatible = "aspeed,ast2500";
+	compatible = "aspeed,ast2500-evb", "aspeed,ast2500";
 
 	aliases {
 		serial4 = &uart5;
@@ -128,4 +128,8 @@
 &gfx {
      status = "okay";
      memory-region = <&gfx_memory>;
+};
+
+&rtc {
+	status = "okay";
 };

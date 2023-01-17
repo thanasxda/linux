@@ -959,6 +959,9 @@ EXPORT_SYMBOL_GPL(icc_link_destroy);
  */
 void icc_node_add(struct icc_node *node, struct icc_provider *provider)
 {
+	if (WARN_ON(node->provider))
+		return;
+
 	mutex_lock(&icc_lock);
 
 	node->provider = provider;
@@ -1054,29 +1057,25 @@ EXPORT_SYMBOL_GPL(icc_provider_add);
 /**
  * icc_provider_del() - delete previously added interconnect provider
  * @provider: the interconnect provider that will be removed from topology
- *
- * Return: 0 on success, or an error code otherwise
  */
-int icc_provider_del(struct icc_provider *provider)
+void icc_provider_del(struct icc_provider *provider)
 {
 	mutex_lock(&icc_lock);
 	if (provider->users) {
 		pr_warn("interconnect provider still has %d users\n",
 			provider->users);
 		mutex_unlock(&icc_lock);
-		return -EBUSY;
+		return;
 	}
 
 	if (!list_empty(&provider->nodes)) {
 		pr_warn("interconnect provider still has nodes\n");
 		mutex_unlock(&icc_lock);
-		return -EBUSY;
+		return;
 	}
 
 	list_del(&provider->provider_list);
 	mutex_unlock(&icc_lock);
-
-	return 0;
 }
 EXPORT_SYMBOL_GPL(icc_provider_del);
 
@@ -1084,9 +1083,15 @@ static int of_count_icc_providers(struct device_node *np)
 {
 	struct device_node *child;
 	int count = 0;
+	const struct of_device_id __maybe_unused ignore_list[] = {
+		{ .compatible = "qcom,sc7180-ipa-virt" },
+		{ .compatible = "qcom,sdx55-ipa-virt" },
+		{}
+	};
 
 	for_each_available_child_of_node(np, child) {
-		if (of_property_read_bool(child, "#interconnect-cells"))
+		if (of_property_read_bool(child, "#interconnect-cells") &&
+		    likely(!of_match_node(ignore_list, child)))
 			count++;
 		count += of_count_icc_providers(child);
 	}

@@ -605,7 +605,7 @@ static void __trigger_tid_waiter(struct rvt_qp *qp)
  * to this call via first_qp().
  *
  * If the qp trigger was already scheduled (!rval)
- * the the reference is dropped, otherwise the resume
+ * the reference is dropped, otherwise the resume
  * or the destroy cancel will dispatch the reference.
  */
 static void tid_rdma_schedule_tid_wakeup(struct rvt_qp *qp)
@@ -850,7 +850,7 @@ void hfi1_kern_init_ctxt_generations(struct hfi1_ctxtdata *rcd)
 	int i;
 
 	for (i = 0; i < RXE_NUM_TID_FLOWS; i++) {
-		rcd->flows[i].generation = mask_generation(prandom_u32());
+		rcd->flows[i].generation = mask_generation(get_random_u32());
 		kern_set_hw_flow(rcd, KERN_GENERATION_RESERVED, i);
 	}
 }
@@ -5174,7 +5174,7 @@ bail_no_tx:
 	priv->s_flags &= ~RVT_S_BUSY;
 	/*
 	 * If we didn't get a txreq, the QP will be woken up later to try
-	 * again, set the flags to the the wake up which work item to wake
+	 * again, set the flags to the wake up which work item to wake
 	 * up.
 	 * (A better algorithm should be found to do this and generalize the
 	 * sleep/wakeup flags.)

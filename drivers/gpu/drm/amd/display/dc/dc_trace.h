@@ -37,3 +37,8 @@
 
 #define TRACE_DCN_CLOCK_STATE(dcn_clocks) \
 	trace_amdgpu_dm_dc_clocks_state(dcn_clocks)
+
+#define TRACE_DCN_FPU(begin, function, line, ref_count) \
+	trace_dcn_fpu(begin, function, line, ref_count)
+#define TRACE_OPTC_LOCK_UNLOCK_STATE(optc, inst, lock) \
+	trace_dcn_optc_lock_unlock_state(optc, inst, lock, __func__, __LINE__)

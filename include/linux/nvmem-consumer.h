@@ -25,6 +25,7 @@ struct nvmem_cell_info {
 	unsigned int		bytes;
 	unsigned int		bit_offset;
 	unsigned int		nbits;
+	struct device_node	*np;
 };
 
 /**
@@ -146,6 +147,20 @@ static inline int nvmem_cell_read_u32(struct device *dev,
 
 static inline int nvmem_cell_read_u64(struct device *dev,
 				      const char *cell_id, u64 *val)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int nvmem_cell_read_variable_le_u32(struct device *dev,
+						 const char *cell_id,
+						 u32 *val)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int nvmem_cell_read_variable_le_u64(struct device *dev,
+						  const char *cell_id,
+						  u64 *val)
 {
 	return -EOPNOTSUPP;
 }

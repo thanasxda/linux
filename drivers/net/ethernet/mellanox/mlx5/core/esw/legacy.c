@@ -11,6 +11,8 @@
 #include "mlx5_core.h"
 #include "eswitch.h"
 #include "fs_core.h"
+#include "fs_ft_pool.h"
+#include "esw/qos.h"
 
 enum {
 	LEGACY_VEPA_PRIO = 0,
@@ -94,8 +96,7 @@ static int esw_create_legacy_fdb_table(struct mlx5_eswitch *esw)
 	if (!flow_group_in)
 		return -ENOMEM;
 
-	table_size = BIT(MLX5_CAP_ESW_FLOWTABLE_FDB(dev, log_max_ft_size));
-	ft_attr.max_fte = table_size;
+	ft_attr.max_fte = POOL_NEXT_SIZE;
 	ft_attr.prio = LEGACY_FDB_PRIO;
 	fdb = mlx5_create_flow_table(root_ns, &ft_attr);
 	if (IS_ERR(fdb)) {
@@ -104,6 +105,7 @@ static int esw_create_legacy_fdb_table(struct mlx5_eswitch *esw)
 		goto out;
 	}
 	esw->fdb_table.legacy.fdb = fdb;
+	table_size = fdb->max_fte;
 
 	/* Addresses group : Full match unicast/multicast addresses */
 	MLX5_SET(create_flow_group_in, flow_group_in, match_criteria_enable,
@@ -430,7 +432,7 @@ int mlx5_eswitch_set_vport_vlan(struct mlx5_eswitch *esw,
 	int err = 0;
 
 	if (!mlx5_esw_allowed(esw))
-		return -EPERM;
+		return vlan ? -EPERM : 0;
 
 	if (vlan || qos)
 		set_flags = SET_VLAN_STRIP | SET_VLAN_INSERT;
@@ -505,6 +507,23 @@ int mlx5_eswitch_set_vport_trust(struct mlx5_eswitch *esw,
 		esw_vport_change_handle_locked(evport);
 
 unlock:
+	mutex_unlock(&esw->state_lock);
+	return err;
+}
+
+int mlx5_eswitch_set_vport_rate(struct mlx5_eswitch *esw, u16 vport,
+				u32 max_rate, u32 min_rate)
+{
+	struct mlx5_vport *evport = mlx5_eswitch_get_vport(esw, vport);
+	int err;
+
+	if (!mlx5_esw_allowed(esw))
+		return -EPERM;
+	if (IS_ERR(evport))
+		return PTR_ERR(evport);
+
+	mutex_lock(&esw->state_lock);
+	err = mlx5_esw_qos_set_vport_rate(esw, evport, max_rate, min_rate);
 	mutex_unlock(&esw->state_lock);
 	return err;
 }

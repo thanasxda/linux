@@ -431,7 +431,7 @@ static int skcipher_copy_iv(struct skcipher_walk *walk)
 
 static int skcipher_walk_first(struct skcipher_walk *walk)
 {
-	if (WARN_ON_ONCE(in_irq()))
+	if (WARN_ON_ONCE(in_hardirq()))
 		return -EDEADLK;
 
 	walk->buffer = NULL;
@@ -763,7 +763,7 @@ struct crypto_sync_skcipher *crypto_alloc_sync_skcipher(
 	struct crypto_skcipher *tfm;
 
 	/* Only sync algorithms allowed. */
-	mask |= CRYPTO_ALG_ASYNC;
+	mask |= CRYPTO_ALG_ASYNC | CRYPTO_ALG_SKCIPHER_REQSIZE_LARGE;
 
 	tfm = crypto_alloc_tfm(alg_name, &crypto_skcipher_type, type, mask);
 

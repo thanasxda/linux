@@ -184,6 +184,7 @@
  */
 
 #include <linux/anon_inodes.h>
+#include <linux/dma-fence-unwrap.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/sched/signal.h>
@@ -404,8 +405,17 @@ int drm_syncobj_find_fence(struct drm_file *file_private,
 
 	if (*fence) {
 		ret = dma_fence_chain_find_seqno(fence, point);
-		if (!ret)
+		if (!ret) {
+			/* If the requested seqno is already signaled
+			 * drm_syncobj_find_fence may return a NULL
+			 * fence. To make sure the recipient gets
+			 * signalled, use a new fence instead.
+			 */
+			if (!*fence)
+				*fence = dma_fence_get_stub();
+
 			goto out;
+		}
 		dma_fence_put(*fence);
 	} else {
 		ret = -EINVAL;
@@ -725,7 +735,7 @@ err_put_fd:
 	return ret;
 }
 /**
- * drm_syncobj_open - initalizes syncobj file-private structures at devnode open time
+ * drm_syncobj_open - initializes syncobj file-private structures at devnode open time
  * @file_private: drm file-private structure to set up
  *
  * Called at device open time, sets up the structure for handling refcounting
@@ -848,7 +858,7 @@ static int drm_syncobj_transfer_to_timeline(struct drm_file *file_private,
 					    struct drm_syncobj_transfer *args)
 {
 	struct drm_syncobj *timeline_syncobj = NULL;
-	struct dma_fence *fence;
+	struct dma_fence *fence, *tmp;
 	struct dma_fence_chain *chain;
 	int ret;
 
@@ -858,18 +868,27 @@ static int drm_syncobj_transfer_to_timeline(struct drm_file *file_private,
 	}
 	ret = drm_syncobj_find_fence(file_private, args->src_handle,
 				     args->src_point, args->flags,
-				     &fence);
+				     &tmp);
 	if (ret)
-		goto err;
-	chain = kzalloc(sizeof(struct dma_fence_chain), GFP_KERNEL);
+		goto err_put_timeline;
+
+	fence = dma_fence_unwrap_merge(tmp);
+	dma_fence_put(tmp);
+	if (!fence) {
+		ret = -ENOMEM;
+		goto err_put_timeline;
+	}
+
+	chain = dma_fence_chain_alloc();
 	if (!chain) {
 		ret = -ENOMEM;
-		goto err1;
+		goto err_free_fence;
 	}
+
 	drm_syncobj_add_point(timeline_syncobj, chain, fence, args->dst_point);
-err1:
+err_free_fence:
 	dma_fence_put(fence);
-err:
+err_put_timeline:
 	drm_syncobj_put(timeline_syncobj);
 
 	return ret;
@@ -1402,10 +1421,10 @@ drm_syncobj_timeline_signal_ioctl(struct drm_device *dev, void *data,
 		goto err_points;
 	}
 	for (i = 0; i < args->count_handles; i++) {
-		chains[i] = kzalloc(sizeof(struct dma_fence_chain), GFP_KERNEL);
+		chains[i] = dma_fence_chain_alloc();
 		if (!chains[i]) {
 			for (j = 0; j < i; j++)
-				kfree(chains[j]);
+				dma_fence_chain_free(chains[j]);
 			ret = -ENOMEM;
 			goto err_chains;
 		}

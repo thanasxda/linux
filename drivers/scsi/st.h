@@ -117,7 +117,6 @@ struct scsi_tape_stats {
 
 /* The tape drive descriptor */
 struct scsi_tape {
-	struct scsi_driver *driver;
 	struct scsi_device *device;
 	struct mutex lock;	/* For serialization */
 	struct completion wait;	/* For SCSI commands */
@@ -187,7 +186,7 @@ struct scsi_tape {
 	unsigned char last_cmnd[6];
 	unsigned char last_sense[16];
 #endif
-	struct gendisk *disk;
+	char name[DISK_NAME_LEN];
 	struct kref     kref;
 	struct scsi_tape_stats *stats;
 };

@@ -165,7 +165,7 @@ static void rsnd_ssi_status_check(struct rsnd_mod *mod,
 
 static u32 rsnd_ssi_multi_secondaries(struct rsnd_dai_stream *io)
 {
-	enum rsnd_mod_type types[] = {
+	static const enum rsnd_mod_type types[] = {
 		RSND_MOD_SSIM1,
 		RSND_MOD_SSIM2,
 		RSND_MOD_SSIM3,
@@ -228,7 +228,7 @@ unsigned int rsnd_ssi_clk_query(struct rsnd_dai *rdai,
 		       int param1, int param2, int *idx)
 {
 	struct rsnd_priv *priv = rsnd_rdai_to_priv(rdai);
-	int ssi_clk_mul_table[] = {
+	static const int ssi_clk_mul_table[] = {
 		1, 2, 4, 8, 16, 6, 12,
 	};
 	int j, ret;
@@ -480,7 +480,9 @@ static int rsnd_ssi_init(struct rsnd_mod *mod,
 
 	ssi->usrcnt++;
 
-	rsnd_mod_power_on(mod);
+	ret = rsnd_mod_power_on(mod);
+	if (ret < 0)
+		return ret;
 
 	rsnd_ssi_config_init(mod, io);
 
@@ -1079,7 +1081,7 @@ static void rsnd_ssi_connect(struct rsnd_mod *mod,
 			     struct rsnd_dai_stream *io)
 {
 	struct rsnd_dai *rdai = rsnd_io_to_rdai(io);
-	enum rsnd_mod_type types[] = {
+	static const enum rsnd_mod_type types[] = {
 		RSND_MOD_SSI,
 		RSND_MOD_SSIM1,
 		RSND_MOD_SSIM2,
@@ -1105,6 +1107,7 @@ void rsnd_parse_connect_ssi(struct rsnd_dai *rdai,
 			    struct device_node *capture)
 {
 	struct rsnd_priv *priv = rsnd_rdai_to_priv(rdai);
+	struct device *dev = rsnd_priv_to_dev(priv);
 	struct device_node *node;
 	struct device_node *np;
 	int i;
@@ -1117,7 +1120,11 @@ void rsnd_parse_connect_ssi(struct rsnd_dai *rdai,
 	for_each_child_of_node(node, np) {
 		struct rsnd_mod *mod;
 
-		i = rsnd_node_fixed_index(np, SSI_NAME, i);
+		i = rsnd_node_fixed_index(dev, np, SSI_NAME, i);
+		if (i < 0) {
+			of_node_put(np);
+			break;
+		}
 
 		mod = rsnd_ssi_mod_get(priv, i);
 
@@ -1182,7 +1189,12 @@ int rsnd_ssi_probe(struct rsnd_priv *priv)
 		if (!of_device_is_available(np))
 			goto skip;
 
-		i = rsnd_node_fixed_index(np, SSI_NAME, i);
+		i = rsnd_node_fixed_index(dev, np, SSI_NAME, i);
+		if (i < 0) {
+			ret = -EINVAL;
+			of_node_put(np);
+			goto rsnd_ssi_probe_done;
+		}
 
 		ssi = rsnd_ssi_get(priv, i);
 

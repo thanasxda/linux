@@ -10,7 +10,6 @@
 #include <linux/compiler.h>
 #include <linux/delay.h>
 #include <linux/device.h>
-#include <linux/dma-iommu.h>
 #include <linux/dma-mapping.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
@@ -201,8 +200,8 @@ static inline phys_addr_t rk_dte_pt_address(u32 dte)
 #define DTE_HI_MASK2	GENMASK(7, 4)
 #define DTE_HI_SHIFT1	24 /* shift bit 8 to bit 32 */
 #define DTE_HI_SHIFT2	32 /* shift bit 4 to bit 36 */
-#define PAGE_DESC_HI_MASK1	GENMASK_ULL(39, 36)
-#define PAGE_DESC_HI_MASK2	GENMASK_ULL(35, 32)
+#define PAGE_DESC_HI_MASK1	GENMASK_ULL(35, 32)
+#define PAGE_DESC_HI_MASK2	GENMASK_ULL(39, 36)
 
 static inline phys_addr_t rk_dte_pt_address_v2(u32 dte)
 {
@@ -281,19 +280,17 @@ static u32 rk_mk_pte(phys_addr_t page, int prot)
  *  11:9 - Page address bit 34:32
  *   8:4 - Page address bit 39:35
  *     3 - Security
- *     2 - Readable
- *     1 - Writable
+ *     2 - Writable
+ *     1 - Readable
  *     0 - 1 if Page @ Page address is valid
  */
-#define RK_PTE_PAGE_READABLE_V2      BIT(2)
-#define RK_PTE_PAGE_WRITABLE_V2      BIT(1)
 
 static u32 rk_mk_pte_v2(phys_addr_t page, int prot)
 {
 	u32 flags = 0;
 
-	flags |= (prot & IOMMU_READ) ? RK_PTE_PAGE_READABLE_V2 : 0;
-	flags |= (prot & IOMMU_WRITE) ? RK_PTE_PAGE_WRITABLE_V2 : 0;
+	flags |= (prot & IOMMU_READ) ? RK_PTE_PAGE_READABLE : 0;
+	flags |= (prot & IOMMU_WRITE) ? RK_PTE_PAGE_WRITABLE : 0;
 
 	return rk_mk_dte_v2(page) | flags;
 }
@@ -1074,10 +1071,6 @@ static struct iommu_domain *rk_iommu_domain_alloc(unsigned type)
 	if (!rk_domain)
 		return NULL;
 
-	if (type == IOMMU_DOMAIN_DMA &&
-	    iommu_get_dma_cookie(&rk_domain->domain))
-		goto err_free_domain;
-
 	/*
 	 * rk32xx iommus use a 2 level pagetable.
 	 * Each level1 (dt) and level2 (pt) table has 1024 4-byte entries.
@@ -1085,7 +1078,7 @@ static struct iommu_domain *rk_iommu_domain_alloc(unsigned type)
 	 */
 	rk_domain->dt = (u32 *)get_zeroed_page(GFP_KERNEL | GFP_DMA32);
 	if (!rk_domain->dt)
-		goto err_put_cookie;
+		goto err_free_domain;
 
 	rk_domain->dt_dma = dma_map_single(dma_dev, rk_domain->dt,
 					   SPAGE_SIZE, DMA_TO_DEVICE);
@@ -1106,9 +1099,6 @@ static struct iommu_domain *rk_iommu_domain_alloc(unsigned type)
 
 err_free_dt:
 	free_page((unsigned long)rk_domain->dt);
-err_put_cookie:
-	if (type == IOMMU_DOMAIN_DMA)
-		iommu_put_dma_cookie(&rk_domain->domain);
 err_free_domain:
 	kfree(rk_domain);
 
@@ -1137,8 +1127,6 @@ static void rk_iommu_domain_free(struct iommu_domain *domain)
 			 SPAGE_SIZE, DMA_TO_DEVICE);
 	free_page((unsigned long)rk_domain->dt);
 
-	if (domain->type == IOMMU_DOMAIN_DMA)
-		iommu_put_dma_cookie(&rk_domain->domain);
 	kfree(rk_domain);
 }
 
@@ -1197,17 +1185,19 @@ static int rk_iommu_of_xlate(struct device *dev,
 
 static const struct iommu_ops rk_iommu_ops = {
 	.domain_alloc = rk_iommu_domain_alloc,
-	.domain_free = rk_iommu_domain_free,
-	.attach_dev = rk_iommu_attach_device,
-	.detach_dev = rk_iommu_detach_device,
-	.map = rk_iommu_map,
-	.unmap = rk_iommu_unmap,
 	.probe_device = rk_iommu_probe_device,
 	.release_device = rk_iommu_release_device,
-	.iova_to_phys = rk_iommu_iova_to_phys,
 	.device_group = rk_iommu_device_group,
 	.pgsize_bitmap = RK_IOMMU_PGSIZE_BITMAP,
 	.of_xlate = rk_iommu_of_xlate,
+	.default_domain_ops = &(const struct iommu_domain_ops) {
+		.attach_dev	= rk_iommu_attach_device,
+		.detach_dev	= rk_iommu_detach_device,
+		.map		= rk_iommu_map,
+		.unmap		= rk_iommu_unmap,
+		.iova_to_phys	= rk_iommu_iova_to_phys,
+		.free		= rk_iommu_domain_free,
+	}
 };
 
 static int rk_iommu_probe(struct platform_device *pdev)
@@ -1307,8 +1297,6 @@ static int rk_iommu_probe(struct platform_device *pdev)
 	 */
 	if (!dma_dev)
 		dma_dev = &pdev->dev;
-
-	bus_set_iommu(&platform_bus_type, &rk_iommu_ops);
 
 	pm_runtime_enable(dev);
 
@@ -1417,9 +1405,4 @@ static struct platform_driver rk_iommu_driver = {
 		   .suppress_bind_attrs = true,
 	},
 };
-
-static int __init rk_iommu_init(void)
-{
-	return platform_driver_register(&rk_iommu_driver);
-}
-subsys_initcall(rk_iommu_init);
+builtin_platform_driver(rk_iommu_driver);

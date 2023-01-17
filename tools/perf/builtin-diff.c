@@ -1156,7 +1156,7 @@ static int check_file_brstack(void)
 	int i;
 
 	data__for_each_file(i, d) {
-		d->session = perf_session__new(&d->data, false, &pdiff.tool);
+		d->session = perf_session__new(&d->data, &pdiff.tool);
 		if (IS_ERR(d->session)) {
 			pr_err("Failed to open %s\n", d->data.path);
 			return PTR_ERR(d->session);
@@ -1188,7 +1188,7 @@ static int __cmd_diff(void)
 	ret = -EINVAL;
 
 	data__for_each_file(i, d) {
-		d->session = perf_session__new(&d->data, false, &pdiff.tool);
+		d->session = perf_session__new(&d->data, &pdiff.tool);
 		if (IS_ERR(d->session)) {
 			ret = PTR_ERR(d->session);
 			pr_err("Failed to open %s\n", d->data.path);
@@ -1260,7 +1260,7 @@ static const char * const diff_usage[] = {
 static const struct option options[] = {
 	OPT_INCR('v', "verbose", &verbose,
 		    "be more verbose (show symbol address, etc)"),
-	OPT_BOOLEAN('q', "quiet", &quiet, "Do not show any message"),
+	OPT_BOOLEAN('q', "quiet", &quiet, "Do not show any warnings or messages"),
 	OPT_BOOLEAN('b', "baseline-only", &show_baseline_only,
 		    "Show only items with match in baseline"),
 	OPT_CALLBACK('c', "compute", &compute,

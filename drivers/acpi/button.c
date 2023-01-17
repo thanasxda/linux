@@ -79,6 +79,17 @@ static const struct dmi_system_id dmi_lid_quirks[] = {
 	},
 	{
 		/*
+		 * Lenovo Yoga 9 14ITL5, initial notification of the LID device
+		 * never happens.
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "82BG"),
+		},
+		.driver_data = (void *)(long)ACPI_BUTTON_LID_INIT_OPEN,
+	},
+	{
+		/*
 		 * Medion Akoya E2215T, notification of the LID device only
 		 * happens on close, not on open and _LID always returns closed.
 		 */
@@ -114,7 +125,7 @@ static const struct dmi_system_id dmi_lid_quirks[] = {
 };
 
 static int acpi_button_add(struct acpi_device *device);
-static int acpi_button_remove(struct acpi_device *device);
+static void acpi_button_remove(struct acpi_device *device);
 static void acpi_button_notify(struct acpi_device *device, u32 event);
 
 #ifdef CONFIG_PM_SLEEP
@@ -569,14 +580,13 @@ static int acpi_button_add(struct acpi_device *device)
 	return error;
 }
 
-static int acpi_button_remove(struct acpi_device *device)
+static void acpi_button_remove(struct acpi_device *device)
 {
 	struct acpi_button *button = acpi_driver_data(device);
 
 	acpi_button_remove_fs(device);
 	input_unregister_device(button->input);
 	kfree(button);
-	return 0;
 }
 
 static int param_set_lid_init_state(const char *val,

@@ -65,14 +65,16 @@ static void ipoib_get_drvinfo(struct net_device *netdev,
 
 	ib_get_device_fw_str(priv->ca, drvinfo->fw_version);
 
-	strlcpy(drvinfo->bus_info, dev_name(priv->ca->dev.parent),
+	strscpy(drvinfo->bus_info, dev_name(priv->ca->dev.parent),
 		sizeof(drvinfo->bus_info));
 
-	strlcpy(drvinfo->driver, "ib_ipoib", sizeof(drvinfo->driver));
+	strscpy(drvinfo->driver, "ib_ipoib", sizeof(drvinfo->driver));
 }
 
 static int ipoib_get_coalesce(struct net_device *dev,
-			      struct ethtool_coalesce *coal)
+			      struct ethtool_coalesce *coal,
+			      struct kernel_ethtool_coalesce *kernel_coal,
+			      struct netlink_ext_ack *extack)
 {
 	struct ipoib_dev_priv *priv = ipoib_priv(dev);
 
@@ -83,7 +85,9 @@ static int ipoib_get_coalesce(struct net_device *dev,
 }
 
 static int ipoib_set_coalesce(struct net_device *dev,
-			      struct ethtool_coalesce *coal)
+			      struct ethtool_coalesce *coal,
+			      struct kernel_ethtool_coalesce *kernel_coal,
+			      struct netlink_ext_ack *extack)
 {
 	struct ipoib_dev_priv *priv = ipoib_priv(dev);
 	int ret;

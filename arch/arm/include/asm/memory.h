@@ -160,10 +160,11 @@ extern unsigned long vectors_base;
 
 /*
  * Physical start and end address of the kernel sections. These addresses are
- * 2MB-aligned to match the section mappings placed over the kernel.
+ * 2MB-aligned to match the section mappings placed over the kernel. We use
+ * u64 so that LPAE mappings beyond the 32bit limit will work out as well.
  */
-extern u32 kernel_sec_start;
-extern u32 kernel_sec_end;
+extern u64 kernel_sec_start;
+extern u64 kernel_sec_end;
 
 /*
  * Physical vs virtual RAM address space conversion.  These are
@@ -367,19 +368,6 @@ static inline unsigned long __virt_to_idmap(unsigned long x)
 }
 
 #define virt_to_idmap(x)	__virt_to_idmap((unsigned long)(x))
-
-/*
- * Virtual <-> DMA view memory address translations
- * Again, these are *only* valid on the kernel direct mapped RAM
- * memory.  Use of these is *deprecated* (and that doesn't mean
- * use the __ prefixed forms instead.)  See dma-mapping.h.
- */
-#ifndef __virt_to_bus
-#define __virt_to_bus	__virt_to_phys
-#define __bus_to_virt	__phys_to_virt
-#define __pfn_to_bus(x)	__pfn_to_phys(x)
-#define __bus_to_pfn(x)	__phys_to_pfn(x)
-#endif
 
 /*
  * Conversion between a struct page and a physical address.

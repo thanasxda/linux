@@ -43,7 +43,7 @@ enum drm_scaling_filter {
 /**
  * struct drm_plane_state - mutable plane state
  *
- * Please not that the destination coordinates @crtc_x, @crtc_y, @crtc_h and
+ * Please note that the destination coordinates @crtc_x, @crtc_y, @crtc_h and
  * @crtc_w and the source coordinates @src_x, @src_y, @src_h and @src_w are the
  * raw coordinates provided by userspace. Drivers should use
  * drm_atomic_helper_check_plane_state() and only use the derived rectangles in
@@ -74,9 +74,7 @@ struct drm_plane_state {
 	 *
 	 * Optional fence to wait for before scanning out @fb. The core atomic
 	 * code will set this when userspace is using explicit fencing. Do not
-	 * write this field directly for a driver's implicit fence, use
-	 * drm_atomic_set_fence_for_plane() to ensure that an explicit fence is
-	 * preserved.
+	 * write this field directly for a driver's implicit fence.
 	 *
 	 * Drivers should store any implicit fence in this from their
 	 * &drm_plane_helper_funcs.prepare_fb callback. See drm_gem_plane_helper_prepare_fb()
@@ -186,6 +184,9 @@ struct drm_plane_state {
 	 * since last plane update) as an array of &drm_mode_rect in framebuffer
 	 * coodinates of the attached framebuffer. Note that unlike plane src,
 	 * damage clips are not in 16.16 fixed point.
+	 *
+	 * See drm_plane_get_damage_clips() and
+	 * drm_plane_get_damage_clips_count() for accessing these.
 	 */
 	struct drm_property_blob *fb_damage_clips;
 
@@ -513,7 +514,7 @@ struct drm_plane_funcs {
 	 * This optional hook is used for the DRM to determine if the given
 	 * format/modifier combination is valid for the plane. This allows the
 	 * DRM to generate the correct format bitmask (which formats apply to
-	 * which modifier), and to valdiate modifiers at atomic_check time.
+	 * which modifier), and to validate modifiers at atomic_check time.
 	 *
 	 * If not present, then any modifier in the plane's modifier
 	 * list is allowed with any of the plane's formats.
@@ -630,7 +631,7 @@ struct drm_plane {
 	unsigned int format_count;
 	/**
 	 * @format_default: driver hasn't supplied supported formats for the
-	 * plane. Used by the drm_plane_init compatibility wrapper only.
+	 * plane. Used by the non-atomic driver compatibility wrapper only.
 	 */
 	bool format_default;
 
@@ -761,12 +762,6 @@ int drm_universal_plane_init(struct drm_device *dev,
 			     const uint64_t *format_modifiers,
 			     enum drm_plane_type type,
 			     const char *name, ...);
-int drm_plane_init(struct drm_device *dev,
-		   struct drm_plane *plane,
-		   uint32_t possible_crtcs,
-		   const struct drm_plane_funcs *funcs,
-		   const uint32_t *formats, unsigned int format_count,
-		   bool is_primary);
 void drm_plane_cleanup(struct drm_plane *plane);
 
 __printf(10, 11)
@@ -800,6 +795,9 @@ void *__drmm_universal_plane_alloc(struct drm_device *dev,
  *
  * The @drm_plane_funcs.destroy hook must be NULL.
  *
+ * Drivers that only support the DRM_FORMAT_MOD_LINEAR modifier support may set
+ * @format_modifiers to NULL. The plane will advertise the linear modifier.
+ *
  * Returns:
  * Pointer to new plane, or ERR_PTR on failure.
  */
@@ -810,6 +808,50 @@ void *__drmm_universal_plane_alloc(struct drm_device *dev,
 					      possible_crtcs, funcs, formats, \
 					      format_count, format_modifiers, \
 					      plane_type, name, ##__VA_ARGS__))
+
+__printf(10, 11)
+void *__drm_universal_plane_alloc(struct drm_device *dev,
+				  size_t size, size_t offset,
+				  uint32_t possible_crtcs,
+				  const struct drm_plane_funcs *funcs,
+				  const uint32_t *formats,
+				  unsigned int format_count,
+				  const uint64_t *format_modifiers,
+				  enum drm_plane_type plane_type,
+				  const char *name, ...);
+
+/**
+ * drm_universal_plane_alloc() - Allocate and initialize an universal plane object
+ * @dev: DRM device
+ * @type: the type of the struct which contains struct &drm_plane
+ * @member: the name of the &drm_plane within @type
+ * @possible_crtcs: bitmask of possible CRTCs
+ * @funcs: callbacks for the new plane
+ * @formats: array of supported formats (DRM_FORMAT\_\*)
+ * @format_count: number of elements in @formats
+ * @format_modifiers: array of struct drm_format modifiers terminated by
+ *                    DRM_FORMAT_MOD_INVALID
+ * @plane_type: type of plane (overlay, primary, cursor)
+ * @name: printf style format string for the plane name, or NULL for default name
+ *
+ * Allocates and initializes a plane object of type @type. The caller
+ * is responsible for releasing the allocated memory with kfree().
+ *
+ * Drivers are encouraged to use drmm_universal_plane_alloc() instead.
+ *
+ * Drivers that only support the DRM_FORMAT_MOD_LINEAR modifier support may set
+ * @format_modifiers to NULL. The plane will advertise the linear modifier.
+ *
+ * Returns:
+ * Pointer to new plane, or ERR_PTR on failure.
+ */
+#define drm_universal_plane_alloc(dev, type, member, possible_crtcs, funcs, formats, \
+				   format_count, format_modifiers, plane_type, name, ...) \
+	((type *)__drm_universal_plane_alloc(dev, sizeof(type), \
+					     offsetof(type, member), \
+					     possible_crtcs, funcs, formats, \
+					     format_count, format_modifiers, \
+					     plane_type, name, ##__VA_ARGS__))
 
 /**
  * drm_plane_index - find the index of a registered plane
@@ -894,38 +936,12 @@ static inline struct drm_plane *drm_plane_find(struct drm_device *dev,
 
 bool drm_any_plane_has_format(struct drm_device *dev,
 			      u32 format, u64 modifier);
-/**
- * drm_plane_get_damage_clips_count - Returns damage clips count.
- * @state: Plane state.
- *
- * Simple helper to get the number of &drm_mode_rect clips set by user-space
- * during plane update.
- *
- * Return: Number of clips in plane fb_damage_clips blob property.
- */
-static inline unsigned int
-drm_plane_get_damage_clips_count(const struct drm_plane_state *state)
-{
-	return (state && state->fb_damage_clips) ?
-		state->fb_damage_clips->length/sizeof(struct drm_mode_rect) : 0;
-}
 
-/**
- * drm_plane_get_damage_clips - Returns damage clips.
- * @state: Plane state.
- *
- * Note that this function returns uapi type &drm_mode_rect. Drivers might
- * instead be interested in internal &drm_rect which can be obtained by calling
- * drm_helper_get_plane_damage_clips().
- *
- * Return: Damage clips in plane fb_damage_clips blob property.
- */
-static inline struct drm_mode_rect *
-drm_plane_get_damage_clips(const struct drm_plane_state *state)
-{
-	return (struct drm_mode_rect *)((state && state->fb_damage_clips) ?
-					state->fb_damage_clips->data : NULL);
-}
+void drm_plane_enable_fb_damage_clips(struct drm_plane *plane);
+unsigned int
+drm_plane_get_damage_clips_count(const struct drm_plane_state *state);
+struct drm_mode_rect *
+drm_plane_get_damage_clips(const struct drm_plane_state *state);
 
 int drm_plane_create_scaling_filter_property(struct drm_plane *plane,
 					     unsigned int supported_filters);

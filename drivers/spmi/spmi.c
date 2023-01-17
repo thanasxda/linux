@@ -35,7 +35,7 @@ static void spmi_ctrl_release(struct device *dev)
 {
 	struct spmi_controller *ctrl = to_spmi_controller(dev);
 
-	ida_simple_remove(&ctrl_ida, ctrl->nr);
+	ida_free(&ctrl_ida, ctrl->nr);
 	kfree(ctrl);
 }
 
@@ -345,7 +345,7 @@ fail_probe:
 	return err;
 }
 
-static int spmi_drv_remove(struct device *dev)
+static void spmi_drv_remove(struct device *dev)
 {
 	const struct spmi_driver *sdrv = to_spmi_driver(dev->driver);
 
@@ -356,7 +356,6 @@ static int spmi_drv_remove(struct device *dev)
 	pm_runtime_disable(dev);
 	pm_runtime_set_suspended(dev);
 	pm_runtime_put_noidle(dev);
-	return 0;
 }
 
 static void spmi_drv_shutdown(struct device *dev)
@@ -386,6 +385,23 @@ static struct bus_type spmi_bus_type = {
 	.shutdown	= spmi_drv_shutdown,
 	.uevent		= spmi_drv_uevent,
 };
+
+/**
+ * spmi_device_from_of() - get the associated SPMI device from a device node
+ *
+ * @np:		device node
+ *
+ * Returns the struct spmi_device associated with a device node or NULL.
+ */
+struct spmi_device *spmi_device_from_of(struct device_node *np)
+{
+	struct device *dev = bus_find_device_by_of_node(&spmi_bus_type, np);
+
+	if (dev)
+		return to_spmi_device(dev);
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(spmi_device_from_of);
 
 /**
  * spmi_controller_alloc() - Allocate a new SPMI device
@@ -441,7 +457,7 @@ struct spmi_controller *spmi_controller_alloc(struct device *parent,
 	ctrl->dev.of_node = parent->of_node;
 	spmi_controller_set_drvdata(ctrl, &ctrl[1]);
 
-	id = ida_simple_get(&ctrl_ida, 0, 0, GFP_KERNEL);
+	id = ida_alloc(&ctrl_ida, GFP_KERNEL);
 	if (id < 0) {
 		dev_err(parent,
 			"unable to allocate SPMI controller identifier.\n");

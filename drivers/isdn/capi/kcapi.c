@@ -32,7 +32,7 @@
 #include <linux/mutex.h>
 #include <linux/rcupdate.h>
 
-static int showcapimsgs = 0;
+static int showcapimsgs;
 static struct workqueue_struct *kcapi_wq;
 
 module_param(showcapimsgs, uint, 0);
@@ -480,6 +480,11 @@ int detach_capi_ctr(struct capi_ctr *ctr)
 
 	ctr_down(ctr, CAPI_CTR_DETACHED);
 
+	if (ctr->cnr < 1 || ctr->cnr - 1 >= CAPI_MAXCONTR) {
+		err = -EINVAL;
+		goto unlock_out;
+	}
+
 	if (capi_controller[ctr->cnr - 1] != ctr) {
 		err = -EINVAL;
 		goto unlock_out;
@@ -793,7 +798,7 @@ u16 capi20_get_serial(u32 contr, u8 serial[CAPI_SERIAL_LEN])
 	u16 ret;
 
 	if (contr == 0) {
-		strlcpy(serial, driver_serial, CAPI_SERIAL_LEN);
+		strscpy(serial, driver_serial, CAPI_SERIAL_LEN);
 		return CAPI_NOERROR;
 	}
 
@@ -801,7 +806,7 @@ u16 capi20_get_serial(u32 contr, u8 serial[CAPI_SERIAL_LEN])
 
 	ctr = get_capi_ctr_by_nr(contr);
 	if (ctr && ctr->state == CAPI_CTR_RUNNING) {
-		strlcpy(serial, ctr->serial, CAPI_SERIAL_LEN);
+		strscpy(serial, ctr->serial, CAPI_SERIAL_LEN);
 		ret = CAPI_NOERROR;
 	} else
 		ret = CAPI_REGNOTINSTALLED;

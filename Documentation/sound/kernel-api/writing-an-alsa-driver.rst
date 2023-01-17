@@ -3368,7 +3368,7 @@ This ensures that the device can be closed and the driver unloaded
 without losing data.
 
 This callback is optional. If you do not set ``drain`` in the struct
-snd_rawmidi_ops structure, ALSA will simply wait for 50 milliseconds
+snd_rawmidi_ops structure, ALSA will simply wait for 50 milliseconds
 instead.
 
 Miscellaneous Devices
@@ -3565,13 +3565,17 @@ given size.
 The second argument (type) and the third argument (device pointer) are
 dependent on the bus. For normal devices, pass the device pointer
 (typically identical as ``card->dev``) to the third argument with
-``SNDRV_DMA_TYPE_DEV`` type. For the continuous buffer unrelated to the
+``SNDRV_DMA_TYPE_DEV`` type.
+
+For the continuous buffer unrelated to the
 bus can be pre-allocated with ``SNDRV_DMA_TYPE_CONTINUOUS`` type.
 You can pass NULL to the device pointer in that case, which is the
 default mode implying to allocate with ``GFP_KERNEL`` flag.
-If you need a different GFP flag, you can pass it by encoding the flag
-into the device pointer via a special macro
-:c:func:`snd_dma_continuous_data()`.
+If you need a restricted (lower) address, set up the coherent DMA mask
+bits for the device, and pass the device pointer, like the normal
+device memory allocations.  For this type, it's still allowed to pass
+NULL to the device pointer, too, if no address restriction is needed.
+
 For the scatter-gather buffers, use ``SNDRV_DMA_TYPE_DEV_SG`` with the
 device pointer (see the `Non-Contiguous Buffers`_ section).
 
@@ -3810,15 +3814,6 @@ Also, note that zero is passed to both the size and the max size
 arguments here.  Since each vmalloc call should succeed at any time,
 we don't need to pre-allocate the buffers like other continuous
 pages.
-
-If you need the 32bit DMA allocation, pass the device pointer encoded
-by :c:func:`snd_dma_continuous_data()` with ``GFP_KERNEL|__GFP_DMA32``
-argument.
-
-::
-
-  snd_pcm_set_managed_buffer_all(pcm, SNDRV_DMA_TYPE_VMALLOC,
-          snd_dma_continuous_data(GFP_KERNEL | __GFP_DMA32), 0, 0);
 
 Proc Interface
 ==============
@@ -4170,6 +4165,39 @@ module license as GPL, etc., otherwise the system is shown as “tainted”.
 
   MODULE_DESCRIPTION("Sound driver for My Chip");
   MODULE_LICENSE("GPL");
+
+
+Device-Managed Resources
+========================
+
+In the examples above, all resources are allocated and released
+manually.  But human beings are lazy in nature, especially developers
+are lazier.  So there are some ways to automate the release part; it's
+the (device-)managed resources aka devres or devm family.  For
+example, an object allocated via :c:func:`devm_kmalloc()` will be
+freed automatically at unbinding the device.
+
+ALSA core provides also the device-managed helper, namely,
+:c:func:`snd_devm_card_new()` for creating a card object.
+Call this functions instead of the normal :c:func:`snd_card_new()`,
+and you can forget the explicit :c:func:`snd_card_free()` call, as
+it's called automagically at error and removal paths.
+
+One caveat is that the call of :c:func:`snd_card_free()` would be put
+at the beginning of the call chain only after you call
+:c:func:`snd_card_register()`.
+
+Also, the ``private_free`` callback is always called at the card free,
+so be careful to put the hardware clean-up procedure in
+``private_free`` callback.  It might be called even before you
+actually set up at an earlier error path.  For avoiding such an
+invalid initialization, you can set ``private_free`` callback after
+:c:func:`snd_card_register()` call succeeds.
+
+Another thing to be remarked is that you should use device-managed
+helpers for each component as much as possible once when you manage
+the card in that way.  Mixing up with the normal and the managed
+resources may screw up the release order.
 
 
 How To Put Your Driver Into ALSA Tree

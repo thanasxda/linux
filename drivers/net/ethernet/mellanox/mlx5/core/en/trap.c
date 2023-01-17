@@ -14,19 +14,26 @@ static int mlx5e_trap_napi_poll(struct napi_struct *napi, int budget)
 	bool busy = false;
 	int work_done = 0;
 
+	rcu_read_lock();
+
 	ch_stats->poll++;
 
 	work_done = mlx5e_poll_rx_cq(&rq->cq, budget);
 	busy |= work_done == budget;
 	busy |= rq->post_wqes(rq);
 
-	if (busy)
-		return budget;
+	if (busy) {
+		work_done = budget;
+		goto out;
+	}
 
 	if (unlikely(!napi_complete_done(napi, work_done)))
-		return work_done;
+		goto out;
 
 	mlx5e_cq_arm(&rq->cq);
+
+out:
+	rcu_read_unlock();
 	return work_done;
 }
 
@@ -92,30 +99,19 @@ static void mlx5e_close_trap_rq(struct mlx5e_rq *rq)
 static int mlx5e_create_trap_direct_rq_tir(struct mlx5_core_dev *mdev, struct mlx5e_tir *tir,
 					   u32 rqn)
 {
-	void *tirc;
-	int inlen;
-	u32 *in;
+	struct mlx5e_tir_builder *builder;
 	int err;
 
-	inlen = MLX5_ST_SZ_BYTES(create_tir_in);
-	in = kvzalloc(inlen, GFP_KERNEL);
-	if (!in)
+	builder = mlx5e_tir_builder_alloc(false);
+	if (!builder)
 		return -ENOMEM;
 
-	tirc = MLX5_ADDR_OF(create_tir_in, in, ctx);
-	MLX5_SET(tirc, tirc, transport_domain, mdev->mlx5e_res.hw_objs.td.tdn);
-	MLX5_SET(tirc, tirc, rx_hash_fn, MLX5_RX_HASH_FN_NONE);
-	MLX5_SET(tirc, tirc, disp_type, MLX5_TIRC_DISP_TYPE_DIRECT);
-	MLX5_SET(tirc, tirc, inline_rqn, rqn);
-	err = mlx5e_create_tir(mdev, tir, in);
-	kvfree(in);
+	mlx5e_tir_builder_build_inline(builder, mdev->mlx5e_res.hw_objs.td.tdn, rqn);
+	err = mlx5e_tir_init(tir, builder, mdev, true);
+
+	mlx5e_tir_builder_free(builder);
 
 	return err;
-}
-
-static void mlx5e_destroy_trap_direct_rq_tir(struct mlx5_core_dev *mdev, struct mlx5e_tir *tir)
-{
-	mlx5e_destroy_tir(mdev, tir);
 }
 
 static void mlx5e_build_trap_params(struct mlx5_core_dev *mdev,
@@ -148,10 +144,10 @@ static struct mlx5e_trap *mlx5e_open_trap(struct mlx5e_priv *priv)
 	t->tstamp   = &priv->tstamp;
 	t->pdev     = mlx5_core_dma_dev(priv->mdev);
 	t->netdev   = priv->netdev;
-	t->mkey_be  = cpu_to_be32(priv->mdev->mlx5e_res.hw_objs.mkey.key);
+	t->mkey_be  = cpu_to_be32(priv->mdev->mlx5e_res.hw_objs.mkey);
 	t->stats    = &priv->trap_stats.ch;
 
-	netif_napi_add(netdev, &t->napi, mlx5e_trap_napi_poll, 64);
+	netif_napi_add(netdev, &t->napi, mlx5e_trap_napi_poll);
 
 	err = mlx5e_open_trap_rq(priv, t);
 	if (unlikely(err))
@@ -173,7 +169,7 @@ err_napi_del:
 
 void mlx5e_close_trap(struct mlx5e_trap *trap)
 {
-	mlx5e_destroy_trap_direct_rq_tir(trap->mdev, &trap->tir);
+	mlx5e_tir_destroy(&trap->tir);
 	mlx5e_close_trap_rq(&trap->rq);
 	netif_napi_del(&trap->napi);
 	kvfree(trap);
@@ -183,6 +179,7 @@ static void mlx5e_activate_trap(struct mlx5e_trap *trap)
 {
 	napi_enable(&trap->napi);
 	mlx5e_activate_rq(&trap->rq);
+	mlx5e_trigger_napi_sched(&trap->napi);
 }
 
 void mlx5e_deactivate_trap(struct mlx5e_priv *priv)
@@ -233,12 +230,12 @@ static int mlx5e_handle_action_trap(struct mlx5e_priv *priv, int trap_id)
 
 	switch (trap_id) {
 	case DEVLINK_TRAP_GENERIC_ID_INGRESS_VLAN_FILTER:
-		err = mlx5e_add_vlan_trap(priv, trap_id, mlx5e_trap_get_tirn(priv->en_trap));
+		err = mlx5e_add_vlan_trap(priv->fs, trap_id, mlx5e_trap_get_tirn(priv->en_trap));
 		if (err)
 			goto err_out;
 		break;
 	case DEVLINK_TRAP_GENERIC_ID_DMAC_FILTER:
-		err = mlx5e_add_mac_trap(priv, trap_id, mlx5e_trap_get_tirn(priv->en_trap));
+		err = mlx5e_add_mac_trap(priv->fs, trap_id, mlx5e_trap_get_tirn(priv->en_trap));
 		if (err)
 			goto err_out;
 		break;
@@ -259,10 +256,10 @@ static int mlx5e_handle_action_drop(struct mlx5e_priv *priv, int trap_id)
 {
 	switch (trap_id) {
 	case DEVLINK_TRAP_GENERIC_ID_INGRESS_VLAN_FILTER:
-		mlx5e_remove_vlan_trap(priv);
+		mlx5e_remove_vlan_trap(priv->fs);
 		break;
 	case DEVLINK_TRAP_GENERIC_ID_DMAC_FILTER:
-		mlx5e_remove_mac_trap(priv);
+		mlx5e_remove_mac_trap(priv->fs);
 		break;
 	default:
 		netdev_warn(priv->netdev, "%s: Unknown trap id %d\n", __func__, trap_id);

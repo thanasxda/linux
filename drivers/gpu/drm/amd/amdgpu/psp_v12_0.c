@@ -84,23 +84,33 @@ static int psp_v12_0_init_microcode(struct psp_context *psp)
 
 		ta_hdr = (const struct ta_firmware_header_v1_0 *)
 				 adev->psp.ta_fw->data;
-		adev->psp.ta_hdcp_ucode_version =
-			le32_to_cpu(ta_hdr->ta_hdcp_ucode_version);
-		adev->psp.ta_hdcp_ucode_size =
-			le32_to_cpu(ta_hdr->ta_hdcp_size_bytes);
-		adev->psp.ta_hdcp_start_addr =
+		adev->psp.hdcp_context.context.bin_desc.fw_version =
+			le32_to_cpu(ta_hdr->hdcp.fw_version);
+		adev->psp.hdcp_context.context.bin_desc.size_bytes =
+			le32_to_cpu(ta_hdr->hdcp.size_bytes);
+		adev->psp.hdcp_context.context.bin_desc.start_addr =
 			(uint8_t *)ta_hdr +
 			le32_to_cpu(ta_hdr->header.ucode_array_offset_bytes);
 
 		adev->psp.ta_fw_version = le32_to_cpu(ta_hdr->header.ucode_version);
 
-		adev->psp.ta_dtm_ucode_version =
-			le32_to_cpu(ta_hdr->ta_dtm_ucode_version);
-		adev->psp.ta_dtm_ucode_size =
-			le32_to_cpu(ta_hdr->ta_dtm_size_bytes);
-		adev->psp.ta_dtm_start_addr =
-			(uint8_t *)adev->psp.ta_hdcp_start_addr +
-			le32_to_cpu(ta_hdr->ta_dtm_offset_bytes);
+		adev->psp.dtm_context.context.bin_desc.fw_version =
+			le32_to_cpu(ta_hdr->dtm.fw_version);
+		adev->psp.dtm_context.context.bin_desc.size_bytes =
+			le32_to_cpu(ta_hdr->dtm.size_bytes);
+		adev->psp.dtm_context.context.bin_desc.start_addr =
+			(uint8_t *)adev->psp.hdcp_context.context.bin_desc.start_addr +
+			le32_to_cpu(ta_hdr->dtm.offset_bytes);
+
+		if (adev->apu_flags & AMD_APU_IS_RENOIR) {
+			adev->psp.securedisplay_context.context.bin_desc.fw_version =
+				le32_to_cpu(ta_hdr->securedisplay.fw_version);
+			adev->psp.securedisplay_context.context.bin_desc.size_bytes =
+				le32_to_cpu(ta_hdr->securedisplay.size_bytes);
+			adev->psp.securedisplay_context.context.bin_desc.start_addr =
+				(uint8_t *)adev->psp.hdcp_context.context.bin_desc.start_addr +
+				le32_to_cpu(ta_hdr->securedisplay.offset_bytes);
+		}
 	}
 
 	return 0;
@@ -138,7 +148,7 @@ static int psp_v12_0_bootloader_load_sysdrv(struct psp_context *psp)
 		return ret;
 
 	/* Copy PSP System Driver binary to memory */
-	psp_copy_fw(psp, psp->sys_start_addr, psp->sys_bin_size);
+	psp_copy_fw(psp, psp->sys.start_addr, psp->sys.size_bytes);
 
 	/* Provide the sys driver to bootloader */
 	WREG32_SOC15(MP0, 0, mmMP0_SMN_C2PMSG_36,
@@ -177,7 +187,7 @@ static int psp_v12_0_bootloader_load_sos(struct psp_context *psp)
 		return ret;
 
 	/* Copy Secure OS binary to PSP memory */
-	psp_copy_fw(psp, psp->sos_start_addr, psp->sos_bin_size);
+	psp_copy_fw(psp, psp->sos.start_addr, psp->sos.size_bytes);
 
 	/* Provide the PSP secure OS to bootloader */
 	WREG32_SOC15(MP0, 0, mmMP0_SMN_C2PMSG_36,
@@ -226,34 +236,6 @@ static void psp_v12_0_reroute_ih(struct psp_context *psp)
 		     0x80000000, 0x8000FFFF, false);
 }
 
-static int psp_v12_0_ring_init(struct psp_context *psp,
-			      enum psp_ring_type ring_type)
-{
-	int ret = 0;
-	struct psp_ring *ring;
-	struct amdgpu_device *adev = psp->adev;
-
-	psp_v12_0_reroute_ih(psp);
-
-	ring = &psp->km_ring;
-
-	ring->ring_type = ring_type;
-
-	/* allocate 4k Page of Local Frame Buffer memory for ring */
-	ring->ring_size = 0x1000;
-	ret = amdgpu_bo_create_kernel(adev, ring->ring_size, PAGE_SIZE,
-				      AMDGPU_GEM_DOMAIN_VRAM,
-				      &adev->firmware.rbuf,
-				      &ring->ring_mem_mc_addr,
-				      (void **)&ring->ring_mem);
-	if (ret) {
-		ring->ring_size = 0;
-		return ret;
-	}
-
-	return 0;
-}
-
 static int psp_v12_0_ring_create(struct psp_context *psp,
 				enum psp_ring_type ring_type)
 {
@@ -261,6 +243,8 @@ static int psp_v12_0_ring_create(struct psp_context *psp,
 	unsigned int psp_ring_reg = 0;
 	struct psp_ring *ring = &psp->km_ring;
 	struct amdgpu_device *adev = psp->adev;
+
+	psp_v12_0_reroute_ih(psp);
 
 	if (amdgpu_sriov_vf(psp->adev)) {
 		/* Write low address of the ring to C2PMSG_102 */
@@ -415,7 +399,6 @@ static const struct psp_funcs psp_v12_0_funcs = {
 	.init_microcode = psp_v12_0_init_microcode,
 	.bootloader_load_sysdrv = psp_v12_0_bootloader_load_sysdrv,
 	.bootloader_load_sos = psp_v12_0_bootloader_load_sos,
-	.ring_init = psp_v12_0_ring_init,
 	.ring_create = psp_v12_0_ring_create,
 	.ring_stop = psp_v12_0_ring_stop,
 	.ring_destroy = psp_v12_0_ring_destroy,

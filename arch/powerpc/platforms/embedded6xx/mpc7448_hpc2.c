@@ -27,10 +27,10 @@
 #include <linux/serial.h>
 #include <linux/tty.h>
 #include <linux/serial_core.h>
+#include <linux/of_irq.h>
 
 #include <asm/time.h>
 #include <asm/machdep.h>
-#include <asm/prom.h>
 #include <asm/udbg.h>
 #include <asm/tsi108.h>
 #include <asm/pci-bridge.h>
@@ -135,6 +135,9 @@ static void __init mpc7448_hpc2_init_IRQ(void)
 	tsi108_pci_int_init(cascade_node);
 	irq_set_handler_data(cascade_pci_irq, mpic);
 	irq_set_chained_handler(cascade_pci_irq, tsi108_irq_cascade);
+
+	of_node_put(tsi_pci);
+	of_node_put(cascade_node);
 #endif
 	/* Configure MPIC outputs to CPU0 */
 	tsi108_write_reg(TSI108_MPIC_OFFSET + 0x30c, 0);
@@ -173,7 +176,7 @@ static int mpc7448_machine_check_exception(struct pt_regs *regs)
 	/* Are we prepared to handle this fault */
 	if ((entry = search_exception_tables(regs->nip)) != NULL) {
 		tsi108_clear_pci_cfg_error();
-		regs_set_return_msr(regs, regs->msr | MSR_RI);
+		regs_set_recoverable(regs);
 		regs_set_return_ip(regs, extable_fixup(entry));
 		return 1;
 	}

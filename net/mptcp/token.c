@@ -231,6 +231,7 @@ found:
 
 /**
  * mptcp_token_get_sock - retrieve mptcp connection sock using its token
+ * @net: restrict to this namespace
  * @token: token of the mptcp connection to retrieve
  *
  * This function returns the mptcp connection structure with the given token.
@@ -238,7 +239,7 @@ found:
  *
  * returns NULL if no connection with the given token value exists.
  */
-struct mptcp_sock *mptcp_token_get_sock(u32 token)
+struct mptcp_sock *mptcp_token_get_sock(struct net *net, u32 token)
 {
 	struct hlist_nulls_node *pos;
 	struct token_bucket *bucket;
@@ -251,11 +252,15 @@ struct mptcp_sock *mptcp_token_get_sock(u32 token)
 again:
 	sk_nulls_for_each_rcu(sk, pos, &bucket->msk_chain) {
 		msk = mptcp_sk(sk);
-		if (READ_ONCE(msk->token) != token)
+		if (READ_ONCE(msk->token) != token ||
+		    !net_eq(sock_net(sk), net))
 			continue;
+
 		if (!refcount_inc_not_zero(&sk->sk_refcnt))
 			goto not_found;
-		if (READ_ONCE(msk->token) != token) {
+
+		if (READ_ONCE(msk->token) != token ||
+		    !net_eq(sock_net(sk), net)) {
 			sock_put(sk);
 			goto again;
 		}
@@ -282,8 +287,8 @@ EXPORT_SYMBOL_GPL(mptcp_token_get_sock);
  * This function returns the first mptcp connection structure found inside the
  * token container starting from the specified position, or NULL.
  *
- * On successful iteration, the iterator is move to the next position and the
- * the acquires a reference to the returned socket.
+ * On successful iteration, the iterator is moved to the next position and
+ * a reference to the returned socket is acquired.
  */
 struct mptcp_sock *mptcp_token_iter_next(const struct net *net, long *s_slot,
 					 long *s_num)
@@ -379,6 +384,7 @@ void mptcp_token_destroy(struct mptcp_sock *msk)
 		bucket->chain_len--;
 	}
 	spin_unlock_bh(&bucket->lock);
+	WRITE_ONCE(msk->token, 0);
 }
 
 void __init mptcp_token_init(void)

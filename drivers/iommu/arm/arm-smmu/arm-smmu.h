@@ -278,6 +278,7 @@ struct arm_smmu_device {
 	struct device			*dev;
 
 	void __iomem			*base;
+	phys_addr_t			ioaddr;
 	unsigned int			numpage;
 	unsigned int			pgshift;
 
@@ -318,11 +319,10 @@ struct arm_smmu_device {
 	unsigned long			pa_size;
 	unsigned long			pgsize_bitmap;
 
-	u32				num_global_irqs;
-	u32				num_context_irqs;
+	int				num_context_irqs;
+	int				num_clks;
 	unsigned int			*irqs;
 	struct clk_bulk_data		*clks;
-	int				num_clks;
 
 	spinlock_t			global_sync_lock;
 
@@ -346,6 +346,7 @@ struct arm_smmu_cfg {
 	};
 	enum arm_smmu_cbar_type		cbar;
 	enum arm_smmu_context_fmt	fmt;
+	bool				flush_walk_prefer_tlbiasid;
 };
 #define ARM_SMMU_INVALID_IRPTNDX	0xff
 

@@ -63,6 +63,13 @@ static int ehci_ci_portpower(struct usb_hcd *hcd, int portnum, bool enable)
 		priv->enabled = enable;
 	}
 
+	if (ci->platdata->flags & CI_HDRC_PHY_VBUS_CONTROL) {
+		if (enable)
+			usb_phy_vbus_on(ci->usb_phy);
+		else
+			usb_phy_vbus_off(ci->usb_phy);
+	}
+
 	if (enable && (ci->platdata->phy_mode == USBPHY_INTERFACE_MODE_HSIC)) {
 		/*
 		 * Marvell 28nm HSIC PHY requires forcing the port to HS mode.
@@ -240,15 +247,18 @@ static int ci_ehci_hub_control(
 )
 {
 	struct ehci_hcd	*ehci = hcd_to_ehci(hcd);
+	unsigned int	ports = HCS_N_PORTS(ehci->hcs_params);
 	u32 __iomem	*status_reg;
-	u32		temp;
+	u32		temp, port_index;
 	unsigned long	flags;
 	int		retval = 0;
 	bool		done = false;
 	struct device *dev = hcd->self.controller;
 	struct ci_hdrc *ci = dev_get_drvdata(dev);
 
-	status_reg = &ehci->regs->port_status[(wIndex & 0xff) - 1];
+	port_index = wIndex & 0xff;
+	port_index -= (port_index > 0);
+	status_reg = &ehci->regs->port_status[port_index];
 
 	spin_lock_irqsave(&ehci->lock, flags);
 
@@ -260,6 +270,11 @@ static int ci_ehci_hub_control(
 	}
 
 	if (typeReq == SetPortFeature && wValue == USB_PORT_FEAT_SUSPEND) {
+		if (!wIndex || wIndex > ports) {
+			retval = -EPIPE;
+			goto done;
+		}
+
 		temp = ehci_readl(ehci, status_reg);
 		if ((temp & PORT_PE) == 0 || (temp & PORT_RESET) != 0) {
 			retval = -EPIPE;
@@ -288,7 +303,7 @@ static int ci_ehci_hub_control(
 			ehci_writel(ehci, temp, status_reg);
 		}
 
-		set_bit((wIndex & 0xff) - 1, &ehci->suspended_ports);
+		set_bit(port_index, &ehci->suspended_ports);
 		goto done;
 	}
 
@@ -444,6 +459,18 @@ static void ci_hdrc_unmap_urb_for_dma(struct usb_hcd *hcd, struct urb *urb)
 	ci_hdrc_free_dma_aligned_buffer(urb);
 }
 
+#ifdef CONFIG_PM_SLEEP
+static void ci_hdrc_host_suspend(struct ci_hdrc *ci)
+{
+	ehci_suspend(ci->hcd, device_may_wakeup(ci->dev));
+}
+
+static void ci_hdrc_host_resume(struct ci_hdrc *ci, bool power_lost)
+{
+	ehci_resume(ci->hcd, power_lost);
+}
+#endif
+
 int ci_hdrc_host_init(struct ci_hdrc *ci)
 {
 	struct ci_role_driver *rdrv;
@@ -457,6 +484,10 @@ int ci_hdrc_host_init(struct ci_hdrc *ci)
 
 	rdrv->start	= host_start;
 	rdrv->stop	= host_stop;
+#ifdef CONFIG_PM_SLEEP
+	rdrv->suspend	= ci_hdrc_host_suspend;
+	rdrv->resume	= ci_hdrc_host_resume;
+#endif
 	rdrv->irq	= host_irq;
 	rdrv->name	= "host";
 	ci->roles[CI_ROLE_HOST] = rdrv;

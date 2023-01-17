@@ -360,6 +360,7 @@ static const struct ib_device_ops usnic_dev_ops = {
 	.reg_user_mr = usnic_ib_reg_mr,
 	INIT_RDMA_OBJ_SIZE(ib_pd, usnic_ib_pd, ibpd),
 	INIT_RDMA_OBJ_SIZE(ib_cq, usnic_ib_cq, ibcq),
+	INIT_RDMA_OBJ_SIZE(ib_qp, usnic_ib_qp_grp, ibqp),
 	INIT_RDMA_OBJ_SIZE(ib_ucontext, usnic_ib_ucontext, ibucontext),
 };
 
@@ -533,6 +534,11 @@ static int usnic_ib_pci_probe(struct pci_dev *pdev,
 	struct usnic_ib_vf *vf;
 	enum usnic_vnic_res_type res_type;
 
+	if (!device_iommu_mapped(&pdev->dev)) {
+		usnic_err("IOMMU required but not present or enabled.  USNIC QPs will not function w/o enabling IOMMU\n");
+		return -EPERM;
+	}
+
 	vf = kzalloc(sizeof(*vf), GFP_KERNEL);
 	if (!vf)
 		return -ENOMEM;
@@ -571,7 +577,7 @@ static int usnic_ib_pci_probe(struct pci_dev *pdev,
 	}
 
 	vf->pf = pf;
-	spin_lock_init(&vf->lock);
+	mutex_init(&vf->lock);
 	mutex_lock(&pf->usdev_lock);
 	list_add_tail(&vf->link, &pf->vf_dev_list);
 	/*
@@ -640,12 +646,6 @@ static int __init usnic_ib_init(void)
 	int err;
 
 	printk_once(KERN_INFO "%s", usnic_version);
-
-	err = usnic_uiom_init(DRV_NAME);
-	if (err) {
-		usnic_err("Unable to initialize umem with err %d\n", err);
-		return err;
-	}
 
 	err = pci_register_driver(&usnic_ib_pci_driver);
 	if (err) {

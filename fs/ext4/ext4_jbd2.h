@@ -231,33 +231,39 @@ int ext4_expand_extra_isize(struct inode *inode,
  * Wrapper functions with which ext4 calls into JBD.
  */
 int __ext4_journal_get_write_access(const char *where, unsigned int line,
-				    handle_t *handle, struct buffer_head *bh);
+				    handle_t *handle, struct super_block *sb,
+				    struct buffer_head *bh,
+				    enum ext4_journal_trigger_type trigger_type);
 
 int __ext4_forget(const char *where, unsigned int line, handle_t *handle,
 		  int is_metadata, struct inode *inode,
 		  struct buffer_head *bh, ext4_fsblk_t blocknr);
 
 int __ext4_journal_get_create_access(const char *where, unsigned int line,
-				handle_t *handle, struct buffer_head *bh);
+				handle_t *handle, struct super_block *sb,
+				struct buffer_head *bh,
+				enum ext4_journal_trigger_type trigger_type);
 
 int __ext4_handle_dirty_metadata(const char *where, unsigned int line,
 				 handle_t *handle, struct inode *inode,
 				 struct buffer_head *bh);
 
-#define ext4_journal_get_write_access(handle, bh) \
-	__ext4_journal_get_write_access(__func__, __LINE__, (handle), (bh))
+#define ext4_journal_get_write_access(handle, sb, bh, trigger_type) \
+	__ext4_journal_get_write_access(__func__, __LINE__, (handle), (sb), \
+					(bh), (trigger_type))
 #define ext4_forget(handle, is_metadata, inode, bh, block_nr) \
 	__ext4_forget(__func__, __LINE__, (handle), (is_metadata), (inode), \
 		      (bh), (block_nr))
-#define ext4_journal_get_create_access(handle, bh) \
-	__ext4_journal_get_create_access(__func__, __LINE__, (handle), (bh))
+#define ext4_journal_get_create_access(handle, sb, bh, trigger_type) \
+	__ext4_journal_get_create_access(__func__, __LINE__, (handle), (sb), \
+					 (bh), (trigger_type))
 #define ext4_handle_dirty_metadata(handle, inode, bh) \
 	__ext4_handle_dirty_metadata(__func__, __LINE__, (handle), (inode), \
 				     (bh))
 
-handle_t *__ext4_journal_start_sb(struct super_block *sb, unsigned int line,
-				  int type, int blocks, int rsv_blocks,
-				  int revoke_creds);
+handle_t *__ext4_journal_start_sb(struct inode *inode, struct super_block *sb,
+				  unsigned int line, int type, int blocks,
+				  int rsv_blocks, int revoke_creds);
 int __ext4_journal_stop(const char *where, unsigned int line, handle_t *handle);
 
 #define EXT4_NOJOURNAL_MAX_REF_COUNT ((unsigned long) 4096)
@@ -297,7 +303,7 @@ static inline int ext4_trans_default_revoke_credits(struct super_block *sb)
 }
 
 #define ext4_journal_start_sb(sb, type, nblocks)			\
-	__ext4_journal_start_sb((sb), __LINE__, (type), (nblocks), 0,	\
+	__ext4_journal_start_sb(NULL, (sb), __LINE__, (type), (nblocks), 0,\
 				ext4_trans_default_revoke_credits(sb))
 
 #define ext4_journal_start(inode, type, nblocks)			\
@@ -317,7 +323,7 @@ static inline handle_t *__ext4_journal_start(struct inode *inode,
 					     int blocks, int rsv_blocks,
 					     int revoke_creds)
 {
-	return __ext4_journal_start_sb(inode->i_sb, line, type, blocks,
+	return __ext4_journal_start_sb(inode, inode->i_sb, line, type, blocks,
 				       rsv_blocks, revoke_creds);
 }
 
@@ -485,7 +491,7 @@ static inline int ext4_free_data_revoke_credits(struct inode *inode, int blocks)
 /*
  * This function controls whether or not we should try to go down the
  * dioread_nolock code paths, which makes it safe to avoid taking
- * i_mutex for direct I/O reads.  This only works for extent-based
+ * i_rwsem for direct I/O reads.  This only works for extent-based
  * files, and it doesn't work if data journaling is enabled, since the
  * dioread_nolock code uses b_private to pass information back to the
  * I/O completion handler, and this conflicts with the jbd's use of

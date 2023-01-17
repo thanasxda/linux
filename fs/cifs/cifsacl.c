@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: LGPL-2.1
 /*
- *   fs/cifs/cifsacl.c
  *
  *   Copyright (C) International Business Machines  Corp., 2007,2008
  *   Author(s): Steve French (sfrench@us.ibm.com)
@@ -14,6 +13,9 @@
 #include <linux/string.h>
 #include <linux/keyctl.h>
 #include <linux/key-type.h>
+#include <uapi/linux/posix_acl.h>
+#include <linux/posix_acl.h>
+#include <linux/posix_acl_xattr.h>
 #include <keys/user-type.h>
 #include "cifspdu.h"
 #include "cifsglob.h"
@@ -21,6 +23,8 @@
 #include "cifsproto.h"
 #include "cifs_debug.h"
 #include "fs_context.h"
+#include "cifs_fs_sb.h"
+#include "cifs_unicode.h"
 
 /* security id for everyone/world system group */
 static const struct cifs_sid sid_everyone = {
@@ -466,7 +470,7 @@ init_cifs_idmap(void)
 	 * this is used to prevent malicious redirections from being installed
 	 * with add_key().
 	 */
-	cred = prepare_kernel_cred(NULL);
+	cred = prepare_kernel_cred(&init_task);
 	if (!cred)
 		return -ENOMEM;
 
@@ -950,6 +954,9 @@ static void populate_new_aces(char *nacl_base,
 		pnntace = (struct cifs_ace *) (nacl_base + nsize);
 		nsize += setup_special_mode_ACE(pnntace, nmode);
 		num_aces++;
+		pnntace = (struct cifs_ace *) (nacl_base + nsize);
+		nsize += setup_authusers_ACE(pnntace);
+		num_aces++;
 		goto set_size;
 	}
 
@@ -1298,7 +1305,7 @@ static int build_sec_desc(struct cifs_ntsd *pntsd, struct cifs_ntsd *pnntsd,
 
 		if (uid_valid(uid)) { /* chown */
 			uid_t id;
-			nowner_sid_ptr = kmalloc(sizeof(struct cifs_sid),
+			nowner_sid_ptr = kzalloc(sizeof(struct cifs_sid),
 								GFP_KERNEL);
 			if (!nowner_sid_ptr) {
 				rc = -ENOMEM;
@@ -1327,7 +1334,7 @@ static int build_sec_desc(struct cifs_ntsd *pntsd, struct cifs_ntsd *pnntsd,
 		}
 		if (gid_valid(gid)) { /* chgrp */
 			gid_t id;
-			ngroup_sid_ptr = kmalloc(sizeof(struct cifs_sid),
+			ngroup_sid_ptr = kzalloc(sizeof(struct cifs_sid),
 								GFP_KERNEL);
 			if (!ngroup_sid_ptr) {
 				rc = -ENOMEM;
@@ -1377,6 +1384,7 @@ chown_chgrp_exit:
 	return rc;
 }
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 struct cifs_ntsd *get_cifs_acl_by_fid(struct cifs_sb_info *cifs_sb,
 				      const struct cifs_fid *cifsfid, u32 *pacllen,
 				      u32 __maybe_unused unused)
@@ -1510,6 +1518,7 @@ out:
 	cifs_put_tlink(tlink);
 	return rc;
 }
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
 /* Translate the CIFS ACL (similar to NTFS ACL) for a file into mode bits */
 int
@@ -1614,7 +1623,7 @@ id_mode_to_cifs_acl(struct inode *inode, const char *path, __u64 *pnmode,
 	nsecdesclen = secdesclen;
 	if (pnmode && *pnmode != NO_CHANGE_64) { /* chmod */
 		if (mode_from_sid)
-			nsecdesclen += sizeof(struct cifs_ace);
+			nsecdesclen += 2 * sizeof(struct cifs_ace);
 		else /* cifsacl */
 			nsecdesclen += 5 * sizeof(struct cifs_ace);
 	} else { /* chown */
@@ -1663,4 +1672,138 @@ id_mode_to_cifs_acl(struct inode *inode, const char *path, __u64 *pnmode,
 	kfree(pnntsd);
 	kfree(pntsd);
 	return rc;
+}
+
+struct posix_acl *cifs_get_acl(struct user_namespace *mnt_userns,
+			       struct dentry *dentry, int type)
+{
+#if defined(CONFIG_CIFS_ALLOW_INSECURE_LEGACY) && defined(CONFIG_CIFS_POSIX)
+	struct posix_acl *acl = NULL;
+	ssize_t rc = -EOPNOTSUPP;
+	unsigned int xid;
+	struct super_block *sb = dentry->d_sb;
+	struct cifs_sb_info *cifs_sb = CIFS_SB(sb);
+	struct tcon_link *tlink;
+	struct cifs_tcon *pTcon;
+	const char *full_path;
+	void *page;
+
+	tlink = cifs_sb_tlink(cifs_sb);
+	if (IS_ERR(tlink))
+		return ERR_CAST(tlink);
+	pTcon = tlink_tcon(tlink);
+
+	xid = get_xid();
+	page = alloc_dentry_path();
+
+	full_path = build_path_from_dentry(dentry, page);
+	if (IS_ERR(full_path)) {
+		acl = ERR_CAST(full_path);
+		goto out;
+	}
+
+	/* return alt name if available as pseudo attr */
+	switch (type) {
+	case ACL_TYPE_ACCESS:
+		if (sb->s_flags & SB_POSIXACL)
+			rc = cifs_do_get_acl(xid, pTcon, full_path, &acl,
+					     ACL_TYPE_ACCESS,
+					     cifs_sb->local_nls,
+					     cifs_remap(cifs_sb));
+		break;
+
+	case ACL_TYPE_DEFAULT:
+		if (sb->s_flags & SB_POSIXACL)
+			rc = cifs_do_get_acl(xid, pTcon, full_path, &acl,
+					     ACL_TYPE_DEFAULT,
+					     cifs_sb->local_nls,
+					     cifs_remap(cifs_sb));
+		break;
+	}
+
+	if (rc < 0) {
+		if (rc == -EINVAL)
+			acl = ERR_PTR(-EOPNOTSUPP);
+		else
+			acl = ERR_PTR(rc);
+	}
+
+out:
+	free_dentry_path(page);
+	free_xid(xid);
+	cifs_put_tlink(tlink);
+	return acl;
+#else
+	return ERR_PTR(-EOPNOTSUPP);
+#endif
+}
+
+int cifs_set_acl(struct user_namespace *mnt_userns, struct dentry *dentry,
+		 struct posix_acl *acl, int type)
+{
+#if defined(CONFIG_CIFS_ALLOW_INSECURE_LEGACY) && defined(CONFIG_CIFS_POSIX)
+	int rc = -EOPNOTSUPP;
+	unsigned int xid;
+	struct super_block *sb = dentry->d_sb;
+	struct cifs_sb_info *cifs_sb = CIFS_SB(sb);
+	struct tcon_link *tlink;
+	struct cifs_tcon *pTcon;
+	const char *full_path;
+	void *page;
+
+	tlink = cifs_sb_tlink(cifs_sb);
+	if (IS_ERR(tlink))
+		return PTR_ERR(tlink);
+	pTcon = tlink_tcon(tlink);
+
+	xid = get_xid();
+	page = alloc_dentry_path();
+
+	full_path = build_path_from_dentry(dentry, page);
+	if (IS_ERR(full_path)) {
+		rc = PTR_ERR(full_path);
+		goto out;
+	}
+
+	if (!acl)
+		goto out;
+
+	/* return dos attributes as pseudo xattr */
+	/* return alt name if available as pseudo attr */
+
+	/* if proc/fs/cifs/streamstoxattr is set then
+		search server for EAs or streams to
+		returns as xattrs */
+	if (posix_acl_xattr_size(acl->a_count) > CIFSMaxBufSize) {
+		cifs_dbg(FYI, "size of EA value too large\n");
+		rc = -EOPNOTSUPP;
+		goto out;
+	}
+
+	switch (type) {
+	case ACL_TYPE_ACCESS:
+		if (sb->s_flags & SB_POSIXACL)
+			rc = cifs_do_set_acl(xid, pTcon, full_path, acl,
+					     ACL_TYPE_ACCESS,
+					     cifs_sb->local_nls,
+					     cifs_remap(cifs_sb));
+		break;
+
+	case ACL_TYPE_DEFAULT:
+		if (sb->s_flags & SB_POSIXACL)
+			rc = cifs_do_set_acl(xid, pTcon, full_path, acl,
+					     ACL_TYPE_DEFAULT,
+					     cifs_sb->local_nls,
+					     cifs_remap(cifs_sb));
+		break;
+	}
+
+out:
+	free_dentry_path(page);
+	free_xid(xid);
+	cifs_put_tlink(tlink);
+	return rc;
+#else
+	return -EOPNOTSUPP;
+#endif
 }

@@ -82,7 +82,7 @@
 			"AMIC", "MICB";
 	};
 
-	spi4 {
+	spi-4 {
 		compatible = "spi-gpio";
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_spi4>;
@@ -286,13 +286,13 @@
 	pinctrl-0 = <&pinctrl_qspi>;
 	status = "okay";
 
-	flash0: n25q256a@0 {
+	flash0: flash@0 {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		compatible = "micron,n25q256a", "jedec,spi-nor";
 		spi-max-frequency = <29000000>;
 		spi-rx-bus-width = <4>;
-		spi-tx-bus-width = <4>;
+		spi-tx-bus-width = <1>;
 		reg = <0>;
 	};
 };

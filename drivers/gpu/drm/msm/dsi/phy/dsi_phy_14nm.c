@@ -86,7 +86,7 @@ struct dsi_pll_14nm {
 /*
  * Private struct for N1/N2 post-divider clocks. These clocks are similar to
  * the generic clk_divider class of clocks. The only difference is that it
- * also sets the slave DSI PLL's post-dividers if in Dual DSI mode
+ * also sets the slave DSI PLL's post-dividers if in bonded DSI mode
  */
 struct dsi_pll_14nm_postdiv {
 	struct clk_hw hw;
@@ -102,7 +102,7 @@ struct dsi_pll_14nm_postdiv {
 #define to_pll_14nm_postdiv(_hw) container_of(_hw, struct dsi_pll_14nm_postdiv, hw)
 
 /*
- * Global list of private DSI PLL struct pointers. We need this for Dual DSI
+ * Global list of private DSI PLL struct pointers. We need this for bonded DSI
  * mode, where the master PLL's clk_ops needs access the slave's private data
  */
 static struct dsi_pll_14nm *pll_14nm_list[DSI_MAX];
@@ -110,14 +110,13 @@ static struct dsi_pll_14nm *pll_14nm_list[DSI_MAX];
 static bool pll_14nm_poll_for_ready(struct dsi_pll_14nm *pll_14nm,
 				    u32 nb_tries, u32 timeout_us)
 {
-	bool pll_locked = false;
+	bool pll_locked = false, pll_ready = false;
 	void __iomem *base = pll_14nm->phy->pll_base;
 	u32 tries, val;
 
 	tries = nb_tries;
 	while (tries--) {
-		val = dsi_phy_read(base +
-			       REG_DSI_14nm_PHY_PLL_RESET_SM_READY_STATUS);
+		val = dsi_phy_read(base + REG_DSI_14nm_PHY_PLL_RESET_SM_READY_STATUS);
 		pll_locked = !!(val & BIT(5));
 
 		if (pll_locked)
@@ -126,23 +125,24 @@ static bool pll_14nm_poll_for_ready(struct dsi_pll_14nm *pll_14nm,
 		udelay(timeout_us);
 	}
 
-	if (!pll_locked) {
-		tries = nb_tries;
-		while (tries--) {
-			val = dsi_phy_read(base +
-				REG_DSI_14nm_PHY_PLL_RESET_SM_READY_STATUS);
-			pll_locked = !!(val & BIT(0));
+	if (!pll_locked)
+		goto out;
 
-			if (pll_locked)
-				break;
+	tries = nb_tries;
+	while (tries--) {
+		val = dsi_phy_read(base + REG_DSI_14nm_PHY_PLL_RESET_SM_READY_STATUS);
+		pll_ready = !!(val & BIT(0));
 
-			udelay(timeout_us);
-		}
+		if (pll_ready)
+			break;
+
+		udelay(timeout_us);
 	}
 
-	DBG("DSI PLL is %slocked", pll_locked ? "" : "*not* ");
+out:
+	DBG("DSI PLL is %slocked, %sready", pll_locked ? "" : "*not* ", pll_ready ? "" : "*not* ");
 
-	return pll_locked;
+	return pll_locked && pll_ready;
 }
 
 static void dsi_pll_14nm_config_init(struct dsi_pll_config *pconf)
@@ -213,9 +213,7 @@ static void pll_14nm_dec_frac_calc(struct dsi_pll_14nm *pll, struct dsi_pll_conf
 	DBG("vco_clk_rate=%lld ref_clk_rate=%lld", vco_clk_rate, fref);
 
 	dec_start_multiple = div_u64(vco_clk_rate * multiplier, fref);
-	div_u64_rem(dec_start_multiple, multiplier, &div_frac_start);
-
-	dec_start = div_u64(dec_start_multiple, multiplier);
+	dec_start = div_u64_rem(dec_start_multiple, multiplier, &div_frac_start);
 
 	pconf->dec_start = (u32)dec_start;
 	pconf->div_frac_start = div_frac_start;
@@ -658,7 +656,7 @@ static int dsi_pll_14nm_postdiv_set_rate(struct clk_hw *hw, unsigned long rate,
 	val |= value << shift;
 	dsi_phy_write(base + REG_DSI_14nm_PHY_CMN_CLK_CFG0, val);
 
-	/* If we're master in dual DSI mode, then the slave PLL's post-dividers
+	/* If we're master in bonded DSI mode, then the slave PLL's post-dividers
 	 * follow the master's post dividers
 	 */
 	if (pll_14nm->phy->usecase == MSM_DSI_PHY_MASTER) {
@@ -713,7 +711,7 @@ static int dsi_14nm_pll_restore_state(struct msm_dsi_phy *phy)
 					cached_state->vco_rate, 0);
 	if (ret) {
 		DRM_DEV_ERROR(&pll_14nm->phy->pdev->dev,
-			"restore vco rate failed. ret=%d\n", ret);
+			      "restore vco rate failed. ret=%d\n", ret);
 		return ret;
 	}
 
@@ -766,14 +764,14 @@ static int dsi_14nm_set_usecase(struct msm_dsi_phy *phy)
 
 static struct clk_hw *pll_14nm_postdiv_register(struct dsi_pll_14nm *pll_14nm,
 						const char *name,
-						const char *parent_name,
+						const struct clk_hw *parent_hw,
 						unsigned long flags,
 						u8 shift)
 {
 	struct dsi_pll_14nm_postdiv *pll_postdiv;
 	struct device *dev = &pll_14nm->phy->pdev->dev;
 	struct clk_init_data postdiv_init = {
-		.parent_names = (const char *[]) { parent_name },
+		.parent_hws = (const struct clk_hw *[]) { parent_hw },
 		.num_parents = 1,
 		.name = name,
 		.flags = flags,
@@ -802,70 +800,70 @@ static struct clk_hw *pll_14nm_postdiv_register(struct dsi_pll_14nm *pll_14nm,
 
 static int pll_14nm_register(struct dsi_pll_14nm *pll_14nm, struct clk_hw **provided_clocks)
 {
-	char clk_name[32], parent[32], vco_name[32];
+	char clk_name[32];
 	struct clk_init_data vco_init = {
-		.parent_names = (const char *[]){ "xo" },
+		.parent_data = &(const struct clk_parent_data) {
+			.fw_name = "ref",
+		},
 		.num_parents = 1,
-		.name = vco_name,
+		.name = clk_name,
 		.flags = CLK_IGNORE_UNUSED,
 		.ops = &clk_ops_dsi_pll_14nm_vco,
 	};
 	struct device *dev = &pll_14nm->phy->pdev->dev;
-	struct clk_hw *hw;
+	struct clk_hw *hw, *n1_postdiv, *n1_postdivby2;
 	int ret;
 
 	DBG("DSI%d", pll_14nm->phy->id);
 
-	snprintf(vco_name, 32, "dsi%dvco_clk", pll_14nm->phy->id);
+	snprintf(clk_name, sizeof(clk_name), "dsi%dvco_clk", pll_14nm->phy->id);
 	pll_14nm->clk_hw.init = &vco_init;
 
 	ret = devm_clk_hw_register(dev, &pll_14nm->clk_hw);
 	if (ret)
 		return ret;
 
-	snprintf(clk_name, 32, "dsi%dn1_postdiv_clk", pll_14nm->phy->id);
-	snprintf(parent, 32, "dsi%dvco_clk", pll_14nm->phy->id);
+	snprintf(clk_name, sizeof(clk_name), "dsi%dn1_postdiv_clk", pll_14nm->phy->id);
 
 	/* N1 postdiv, bits 0-3 in REG_DSI_14nm_PHY_CMN_CLK_CFG0 */
-	hw = pll_14nm_postdiv_register(pll_14nm, clk_name, parent,
-				       CLK_SET_RATE_PARENT, 0);
-	if (IS_ERR(hw))
-		return PTR_ERR(hw);
+	n1_postdiv = pll_14nm_postdiv_register(pll_14nm, clk_name,
+			&pll_14nm->clk_hw, CLK_SET_RATE_PARENT, 0);
+	if (IS_ERR(n1_postdiv))
+		return PTR_ERR(n1_postdiv);
 
-	snprintf(clk_name, 32, "dsi%dpllbyte", pll_14nm->phy->id);
-	snprintf(parent, 32, "dsi%dn1_postdiv_clk", pll_14nm->phy->id);
+	snprintf(clk_name, sizeof(clk_name), "dsi%dpllbyte", pll_14nm->phy->id);
 
 	/* DSI Byte clock = VCO_CLK / N1 / 8 */
-	hw = devm_clk_hw_register_fixed_factor(dev, clk_name, parent,
-					  CLK_SET_RATE_PARENT, 1, 8);
+	hw = devm_clk_hw_register_fixed_factor_parent_hw(dev, clk_name,
+			n1_postdiv, CLK_SET_RATE_PARENT, 1, 8);
 	if (IS_ERR(hw))
 		return PTR_ERR(hw);
 
 	provided_clocks[DSI_BYTE_PLL_CLK] = hw;
 
-	snprintf(clk_name, 32, "dsi%dn1_postdivby2_clk", pll_14nm->phy->id);
-	snprintf(parent, 32, "dsi%dn1_postdiv_clk", pll_14nm->phy->id);
+	snprintf(clk_name, sizeof(clk_name), "dsi%dn1_postdivby2_clk", pll_14nm->phy->id);
 
 	/*
 	 * Skip the mux for now, force DSICLK_SEL to 1, Add a /2 divider
 	 * on the way. Don't let it set parent.
 	 */
-	hw = devm_clk_hw_register_fixed_factor(dev, clk_name, parent, 0, 1, 2);
-	if (IS_ERR(hw))
-		return PTR_ERR(hw);
+	n1_postdivby2 = devm_clk_hw_register_fixed_factor_parent_hw(dev,
+			clk_name, n1_postdiv, 0, 1, 2);
+	if (IS_ERR(n1_postdivby2))
+		return PTR_ERR(n1_postdivby2);
 
-	snprintf(clk_name, 32, "dsi%dpll", pll_14nm->phy->id);
-	snprintf(parent, 32, "dsi%dn1_postdivby2_clk", pll_14nm->phy->id);
+	snprintf(clk_name, sizeof(clk_name), "dsi%dpll", pll_14nm->phy->id);
 
 	/* DSI pixel clock = VCO_CLK / N1 / 2 / N2
 	 * This is the output of N2 post-divider, bits 4-7 in
 	 * REG_DSI_14nm_PHY_CMN_CLK_CFG0. Don't let it set parent.
 	 */
-	hw = pll_14nm_postdiv_register(pll_14nm, clk_name, parent, 0, 4);
+	hw = pll_14nm_postdiv_register(pll_14nm, clk_name, n1_postdivby2,
+			0, 4);
 	if (IS_ERR(hw))
 		return PTR_ERR(hw);
 
-	provided_clocks[DSI_PIXEL_PLL_CLK]	= hw;
+	provided_clocks[DSI_PIXEL_PLL_CLK] = hw;
 
 	return 0;
 }
@@ -952,7 +950,8 @@ static int dsi_14nm_phy_enable(struct msm_dsi_phy *phy,
 
 	if (msm_dsi_dphy_timing_calc_v2(timing, clk_req)) {
 		DRM_DEV_ERROR(&phy->pdev->dev,
-			"%s: D-PHY timing calculation failed\n", __func__);
+			      "%s: D-PHY timing calculation failed\n",
+			      __func__);
 		return -EINVAL;
 	}
 
@@ -1005,7 +1004,7 @@ static int dsi_14nm_phy_enable(struct msm_dsi_phy *phy,
 	ret = dsi_14nm_set_usecase(phy);
 	if (ret) {
 		DRM_DEV_ERROR(&phy->pdev->dev, "%s: set pll usecase failed, %d\n",
-			__func__, ret);
+			      __func__, ret);
 		return ret;
 	}
 
@@ -1024,14 +1023,18 @@ static void dsi_14nm_phy_disable(struct msm_dsi_phy *phy)
 	wmb();
 }
 
+static const struct regulator_bulk_data dsi_phy_14nm_17mA_regulators[] = {
+	{ .supply = "vcca", .init_load_uA = 17000 },
+};
+
+static const struct regulator_bulk_data dsi_phy_14nm_73p4mA_regulators[] = {
+	{ .supply = "vcca", .init_load_uA = 73400 },
+};
+
 const struct msm_dsi_phy_cfg dsi_phy_14nm_cfgs = {
 	.has_phy_lane = true,
-	.reg_cfg = {
-		.num = 1,
-		.regs = {
-			{"vcca", 17000, 32},
-		},
-	},
+	.regulator_data = dsi_phy_14nm_17mA_regulators,
+	.num_regulators = ARRAY_SIZE(dsi_phy_14nm_17mA_regulators),
 	.ops = {
 		.enable = dsi_14nm_phy_enable,
 		.disable = dsi_14nm_phy_disable,
@@ -1047,12 +1050,8 @@ const struct msm_dsi_phy_cfg dsi_phy_14nm_cfgs = {
 
 const struct msm_dsi_phy_cfg dsi_phy_14nm_660_cfgs = {
 	.has_phy_lane = true,
-	.reg_cfg = {
-		.num = 1,
-		.regs = {
-			{"vcca", 17000, 32},
-		},
-	},
+	.regulator_data = dsi_phy_14nm_73p4mA_regulators,
+	.num_regulators = ARRAY_SIZE(dsi_phy_14nm_73p4mA_regulators),
 	.ops = {
 		.enable = dsi_14nm_phy_enable,
 		.disable = dsi_14nm_phy_disable,
@@ -1062,6 +1061,40 @@ const struct msm_dsi_phy_cfg dsi_phy_14nm_660_cfgs = {
 	},
 	.min_pll_rate = VCO_MIN_RATE,
 	.max_pll_rate = VCO_MAX_RATE,
-	.io_start = { 0xc994400, 0xc996000 },
+	.io_start = { 0xc994400, 0xc996400 },
 	.num_dsi_phy = 2,
+};
+
+const struct msm_dsi_phy_cfg dsi_phy_14nm_8953_cfgs = {
+	.has_phy_lane = true,
+	.regulator_data = dsi_phy_14nm_17mA_regulators,
+	.num_regulators = ARRAY_SIZE(dsi_phy_14nm_17mA_regulators),
+	.ops = {
+		.enable = dsi_14nm_phy_enable,
+		.disable = dsi_14nm_phy_disable,
+		.pll_init = dsi_pll_14nm_init,
+		.save_pll_state = dsi_14nm_pll_save_state,
+		.restore_pll_state = dsi_14nm_pll_restore_state,
+	},
+	.min_pll_rate = VCO_MIN_RATE,
+	.max_pll_rate = VCO_MAX_RATE,
+	.io_start = { 0x1a94400, 0x1a96400 },
+	.num_dsi_phy = 2,
+};
+
+const struct msm_dsi_phy_cfg dsi_phy_14nm_2290_cfgs = {
+	.has_phy_lane = true,
+	.regulator_data = dsi_phy_14nm_17mA_regulators,
+	.num_regulators = ARRAY_SIZE(dsi_phy_14nm_17mA_regulators),
+	.ops = {
+		.enable = dsi_14nm_phy_enable,
+		.disable = dsi_14nm_phy_disable,
+		.pll_init = dsi_pll_14nm_init,
+		.save_pll_state = dsi_14nm_pll_save_state,
+		.restore_pll_state = dsi_14nm_pll_restore_state,
+	},
+	.min_pll_rate = VCO_MIN_RATE,
+	.max_pll_rate = VCO_MAX_RATE,
+	.io_start = { 0x5e94400 },
+	.num_dsi_phy = 1,
 };

@@ -55,9 +55,6 @@ static int mt7530_phy_config_init(struct phy_device *phydev)
 
 static int mt7531_phy_config_init(struct phy_device *phydev)
 {
-	if (phydev->interface != PHY_INTERFACE_MODE_INTERNAL)
-		return -EINVAL;
-
 	mtk_gephy_config_init(phydev);
 
 	/* PHY link down power saving enable */
@@ -81,6 +78,8 @@ static struct phy_driver mtk_gephy_driver[] = {
 		 */
 		.config_intr	= genphy_no_config_intr,
 		.handle_interrupt = genphy_handle_interrupt_no_ack,
+		.suspend	= genphy_suspend,
+		.resume		= genphy_resume,
 		.read_page	= mtk_gephy_read_page,
 		.write_page	= mtk_gephy_write_page,
 	},
@@ -93,6 +92,8 @@ static struct phy_driver mtk_gephy_driver[] = {
 		 */
 		.config_intr	= genphy_no_config_intr,
 		.handle_interrupt = genphy_handle_interrupt_no_ack,
+		.suspend	= genphy_suspend,
+		.resume		= genphy_resume,
 		.read_page	= mtk_gephy_read_page,
 		.write_page	= mtk_gephy_write_page,
 	},

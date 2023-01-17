@@ -319,6 +319,16 @@ static int b53_mmap_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void b53_mmap_shutdown(struct platform_device *pdev)
+{
+	struct b53_device *dev = platform_get_drvdata(pdev);
+
+	if (dev)
+		b53_switch_shutdown(dev);
+
+	platform_set_drvdata(pdev, NULL);
+}
+
 static const struct of_device_id b53_mmap_of_table[] = {
 	{ .compatible = "brcm,bcm3384-switch" },
 	{ .compatible = "brcm,bcm6328-switch" },
@@ -331,6 +341,7 @@ MODULE_DEVICE_TABLE(of, b53_mmap_of_table);
 static struct platform_driver b53_mmap_driver = {
 	.probe = b53_mmap_probe,
 	.remove = b53_mmap_remove,
+	.shutdown = b53_mmap_shutdown,
 	.driver = {
 		.name = "b53-switch",
 		.of_match_table = b53_mmap_of_table,

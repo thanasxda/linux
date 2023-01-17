@@ -9,11 +9,12 @@
 
 #include <linux/atomic.h>
 #include <linux/byteorder/generic.h>
+#include <linux/container_of.h>
+#include <linux/errno.h>
 #include <linux/gfp.h>
 #include <linux/if.h>
 #include <linux/if_arp.h>
 #include <linux/if_ether.h>
-#include <linux/kernel.h>
 #include <linux/kref.h>
 #include <linux/limits.h>
 #include <linux/list.h>
@@ -149,25 +150,28 @@ static bool batadv_is_on_batman_iface(const struct net_device *net_dev)
 	struct net *net = dev_net(net_dev);
 	struct net_device *parent_dev;
 	struct net *parent_net;
+	int iflink;
 	bool ret;
 
 	/* check if this is a batman-adv mesh interface */
 	if (batadv_softif_is_valid(net_dev))
 		return true;
 
-	/* no more parents..stop recursion */
-	if (dev_get_iflink(net_dev) == 0 ||
-	    dev_get_iflink(net_dev) == net_dev->ifindex)
+	iflink = dev_get_iflink(net_dev);
+	if (iflink == 0)
 		return false;
 
 	parent_net = batadv_getlink_net(net_dev, net);
 
+	/* iflink to itself, most likely physical device */
+	if (net == parent_net && iflink == net_dev->ifindex)
+		return false;
+
 	/* recurse over the parent device */
-	parent_dev = __dev_get_by_index((struct net *)parent_net,
-					dev_get_iflink(net_dev));
-	/* if we got a NULL parent_dev there is something broken.. */
+	parent_dev = __dev_get_by_index((struct net *)parent_net, iflink);
 	if (!parent_dev) {
-		pr_err("Cannot find parent device\n");
+		pr_warn("Cannot find parent device. Skipping batadv-on-batadv check for %s\n",
+			net_dev->name);
 		return false;
 	}
 
@@ -214,14 +218,15 @@ static struct net_device *batadv_get_real_netdevice(struct net_device *netdev)
 	struct net_device *real_netdev = NULL;
 	struct net *real_net;
 	struct net *net;
-	int ifindex;
+	int iflink;
 
 	ASSERT_RTNL();
 
 	if (!netdev)
 		return NULL;
 
-	if (netdev->ifindex == dev_get_iflink(netdev)) {
+	iflink = dev_get_iflink(netdev);
+	if (iflink == 0) {
 		dev_hold(netdev);
 		return netdev;
 	}
@@ -231,13 +236,19 @@ static struct net_device *batadv_get_real_netdevice(struct net_device *netdev)
 		goto out;
 
 	net = dev_net(hard_iface->soft_iface);
-	ifindex = dev_get_iflink(netdev);
 	real_net = batadv_getlink_net(netdev, net);
-	real_netdev = dev_get_by_index(real_net, ifindex);
+
+	/* iflink to itself, most likely physical device */
+	if (net == real_net && netdev->ifindex == iflink) {
+		real_netdev = netdev;
+		dev_hold(real_netdev);
+		goto out;
+	}
+
+	real_netdev = dev_get_by_index(real_net, iflink);
 
 out:
-	if (hard_iface)
-		batadv_hardif_put(hard_iface);
+	batadv_hardif_put(hard_iface);
 	return real_netdev;
 }
 
@@ -297,9 +308,11 @@ static bool batadv_is_cfg80211_netdev(struct net_device *net_device)
 	if (!net_device)
 		return false;
 
+#if IS_ENABLED(CONFIG_CFG80211)
 	/* cfg80211 drivers have to set ieee80211_ptr */
 	if (net_device->ieee80211_ptr)
 		return true;
+#endif
 
 	return false;
 }
@@ -457,8 +470,7 @@ static void batadv_primary_if_update_addr(struct batadv_priv *bat_priv,
 	batadv_dat_init_own_addr(bat_priv, primary_if);
 	batadv_bla_update_orig_address(bat_priv, primary_if, oldif);
 out:
-	if (primary_if)
-		batadv_hardif_put(primary_if);
+	batadv_hardif_put(primary_if);
 }
 
 static void batadv_primary_if_select(struct batadv_priv *bat_priv,
@@ -481,8 +493,7 @@ static void batadv_primary_if_select(struct batadv_priv *bat_priv,
 	batadv_primary_if_update_addr(bat_priv, curr_hard_iface);
 
 out:
-	if (curr_hard_iface)
-		batadv_hardif_put(curr_hard_iface);
+	batadv_hardif_put(curr_hard_iface);
 }
 
 static bool
@@ -657,8 +668,7 @@ batadv_hardif_activate_interface(struct batadv_hard_iface *hard_iface)
 		bat_priv->algo_ops->iface.activate(hard_iface);
 
 out:
-	if (primary_if)
-		batadv_hardif_put(primary_if);
+	batadv_hardif_put(primary_if);
 }
 
 static void
@@ -690,6 +700,9 @@ int batadv_hardif_enable_interface(struct batadv_hard_iface *hard_iface,
 	__be16 ethertype = htons(ETH_P_BATMAN);
 	int max_header_len = batadv_max_header_len();
 	int ret;
+
+	if (hard_iface->net_dev->mtu < ETH_MIN_MTU + max_header_len)
+		return -EINVAL;
 
 	if (hard_iface->if_status != BATADV_IF_NOT_IN_USE)
 		goto out;
@@ -811,8 +824,7 @@ void batadv_hardif_disable_interface(struct batadv_hard_iface *hard_iface)
 		new_if = batadv_hardif_get_active(hard_iface->soft_iface);
 		batadv_primary_if_select(bat_priv, new_if);
 
-		if (new_if)
-			batadv_hardif_put(new_if);
+		batadv_hardif_put(new_if);
 	}
 
 	bat_priv->algo_ops->iface.disable(hard_iface);
@@ -834,8 +846,7 @@ void batadv_hardif_disable_interface(struct batadv_hard_iface *hard_iface)
 	batadv_hardif_put(hard_iface);
 
 out:
-	if (primary_if)
-		batadv_hardif_put(primary_if);
+	batadv_hardif_put(primary_if);
 }
 
 static struct batadv_hard_iface *
@@ -990,8 +1001,7 @@ static int batadv_hard_if_event(struct notifier_block *this,
 hardif_put:
 	batadv_hardif_put(hard_iface);
 out:
-	if (primary_if)
-		batadv_hardif_put(primary_if);
+	batadv_hardif_put(primary_if);
 	return NOTIFY_DONE;
 }
 

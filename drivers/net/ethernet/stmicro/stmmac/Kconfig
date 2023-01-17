@@ -2,12 +2,12 @@
 config STMMAC_ETH
 	tristate "STMicroelectronics Multi-Gigabit Ethernet driver"
 	depends on HAS_IOMEM && HAS_DMA
+	depends on PTP_1588_CLOCK_OPTIONAL
 	select MII
 	select PCS_XPCS
 	select PAGE_POOL
 	select PHYLINK
 	select CRC32
-	imply PTP_1588_CLOCK
 	select RESET_CONTROLLER
 	help
 	  This is the driver for the Ethernet IPs built around a
@@ -90,6 +90,9 @@ config DWMAC_IPQ806X
 	  device driver. This driver does not use any of the hardware
 	  acceleration features available on this SoC. Network devices
 	  will behave like standard non-accelerated ethernet interfaces.
+
+	  Select the QCOM_SOCINFO config flag to enable specific dwmac
+	  fixup based on the ipq806x SoC revision.
 
 config DWMAC_LPC18XX
 	tristate "NXP LPC18xx/43xx DWMAC support"
@@ -231,6 +234,15 @@ config DWMAC_INTEL_PLAT
 	  This selects the Intel platform specific glue layer support for
 	  the stmmac device driver. This driver is used for the Intel Keem Bay
 	  SoC.
+
+config DWMAC_TEGRA
+	tristate "NVIDIA Tegra MGBE support"
+	depends on ARCH_TEGRA || COMPILE_TEST
+	help
+	  This selects the Multi-GigaBit Ethernet (MGBE) Controller that is
+	  found on the NVIDIA Tegra SoC devices. This driver provides the glue
+	  layer on top of the stmmac driver required for these NVIDIA Tegra SoC
+	  devices.
 
 config DWMAC_VISCONTI
 	tristate "Toshiba Visconti DWMAC support"

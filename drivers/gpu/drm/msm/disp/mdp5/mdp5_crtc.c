@@ -8,6 +8,7 @@
 #include <linux/sort.h>
 
 #include <drm/drm_atomic.h>
+#include <drm/drm_blend.h>
 #include <drm/drm_mode.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_flip_work.h>
@@ -612,9 +613,15 @@ static int mdp5_crtc_setup_pipeline(struct drm_crtc *crtc,
 		if (ret)
 			return ret;
 
-		mdp5_mixer_release(new_crtc_state->state, old_mixer);
+		ret = mdp5_mixer_release(new_crtc_state->state, old_mixer);
+		if (ret)
+			return ret;
+
 		if (old_r_mixer) {
-			mdp5_mixer_release(new_crtc_state->state, old_r_mixer);
+			ret = mdp5_mixer_release(new_crtc_state->state, old_r_mixer);
+			if (ret)
+				return ret;
+
 			if (!need_right_mixer)
 				pipeline->r_mixer = NULL;
 		}
@@ -690,6 +697,8 @@ static int mdp5_crtc_atomic_check(struct drm_crtc *crtc,
 {
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
 									  crtc);
+	struct mdp5_crtc_state *mdp5_cstate = to_mdp5_crtc_state(crtc_state);
+	struct mdp5_interface *intf = mdp5_cstate->pipeline.intf;
 	struct mdp5_kms *mdp5_kms = get_kms(crtc);
 	struct drm_plane *plane;
 	struct drm_device *dev = crtc->dev;
@@ -706,11 +715,17 @@ static int mdp5_crtc_atomic_check(struct drm_crtc *crtc,
 	DBG("%s: check", crtc->name);
 
 	drm_atomic_crtc_state_for_each_plane_state(plane, pstate, crtc_state) {
+		struct mdp5_plane_state *mdp5_pstate =
+				to_mdp5_plane_state(pstate);
+
 		if (!pstate->visible)
 			continue;
 
 		pstates[cnt].plane = plane;
 		pstates[cnt].state = to_mdp5_plane_state(pstate);
+
+		mdp5_pstate->needs_dirtyfb =
+			intf->mode == MDP5_INTF_DSI_MODE_COMMAND;
 
 		/*
 		 * if any plane on this crtc uses 2 hwpipes, then we need
@@ -983,8 +998,10 @@ static int mdp5_crtc_cursor_set(struct drm_crtc *crtc,
 
 	ret = msm_gem_get_and_pin_iova(cursor_bo, kms->aspace,
 			&mdp5_crtc->cursor.iova);
-	if (ret)
+	if (ret) {
+		drm_gem_object_put(cursor_bo);
 		return -EINVAL;
+	}
 
 	pm_runtime_get_sync(&pdev->dev);
 
@@ -1124,6 +1141,20 @@ static void mdp5_crtc_reset(struct drm_crtc *crtc)
 
 	__drm_atomic_helper_crtc_reset(crtc, &mdp5_cstate->base);
 }
+
+static const struct drm_crtc_funcs mdp5_crtc_no_lm_cursor_funcs = {
+	.set_config = drm_atomic_helper_set_config,
+	.destroy = mdp5_crtc_destroy,
+	.page_flip = drm_atomic_helper_page_flip,
+	.reset = mdp5_crtc_reset,
+	.atomic_duplicate_state = mdp5_crtc_duplicate_state,
+	.atomic_destroy_state = mdp5_crtc_destroy_state,
+	.atomic_print_state = mdp5_crtc_atomic_print_state,
+	.get_vblank_counter = mdp5_crtc_get_vblank_counter,
+	.enable_vblank  = msm_crtc_enable_vblank,
+	.disable_vblank = msm_crtc_disable_vblank,
+	.get_vblank_timestamp = drm_crtc_vblank_helper_get_vblank_timestamp,
+};
 
 static const struct drm_crtc_funcs mdp5_crtc_funcs = {
 	.set_config = drm_atomic_helper_set_config,
@@ -1313,6 +1344,8 @@ struct drm_crtc *mdp5_crtc_init(struct drm_device *dev,
 	mdp5_crtc->lm_cursor_enabled = cursor_plane ? false : true;
 
 	drm_crtc_init_with_planes(dev, crtc, plane, cursor_plane,
+				  cursor_plane ?
+				  &mdp5_crtc_no_lm_cursor_funcs :
 				  &mdp5_crtc_funcs, NULL);
 
 	drm_flip_work_init(&mdp5_crtc->unref_cursor_work,

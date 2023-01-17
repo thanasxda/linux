@@ -182,7 +182,7 @@ struct dm_target_spec {
 struct dm_target_deps {
 	__u32 count;	/* Array size */
 	__u32 padding;	/* unused */
-	__u64 dev[0];	/* out */
+	__u64 dev[];	/* out */
 };
 
 /*
@@ -192,7 +192,7 @@ struct dm_name_list {
 	__u64 dev;
 	__u32 next;		/* offset to the next record from
 				   the _start_ of this */
-	char name[0];
+	char name[];
 
 	/*
 	 * The following members can be accessed by taking a pointer that
@@ -216,7 +216,7 @@ struct dm_target_versions {
         __u32 next;
         __u32 version[3];
 
-        char name[0];
+        char name[];
 };
 
 /*
@@ -225,7 +225,7 @@ struct dm_target_versions {
 struct dm_target_msg {
 	__u64 sector;	/* Device sector */
 
-	char message[0];
+	char message[];
 };
 
 /*
@@ -286,9 +286,9 @@ enum {
 #define DM_DEV_SET_GEOMETRY	_IOWR(DM_IOCTL, DM_DEV_SET_GEOMETRY_CMD, struct dm_ioctl)
 
 #define DM_VERSION_MAJOR	4
-#define DM_VERSION_MINOR	45
+#define DM_VERSION_MINOR	47
 #define DM_VERSION_PATCHLEVEL	0
-#define DM_VERSION_EXTRA	"-ioctl (2021-03-22)"
+#define DM_VERSION_EXTRA	"-ioctl (2022-07-28)"
 
 /* Status bits */
 #define DM_READONLY_FLAG	(1 << 0) /* In/Out */
@@ -375,5 +375,11 @@ enum {
  * If set, the device is suspended internally.
  */
 #define DM_INTERNAL_SUSPEND_FLAG	(1 << 18) /* Out */
+
+/*
+ * If set, returns in the in buffer passed by UM, the raw table information
+ * that would be measured by IMA subsystem on device state change.
+ */
+#define DM_IMA_MEASUREMENT_FLAG	(1 << 19) /* In */
 
 #endif				/* _LINUX_DM_IOCTL_H */

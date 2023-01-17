@@ -6,7 +6,7 @@
  */
 
 #include "dm-core.h"
-
+#include "dm-ima.h"
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 #include <linux/miscdevice.h>
@@ -18,8 +18,10 @@
 #include <linux/dm-ioctl.h>
 #include <linux/hdreg.h>
 #include <linux/compat.h>
+#include <linux/nospec.h>
 
 #include <linux/uaccess.h>
+#include <linux/ima.h>
 
 #define DM_MSG_PREFIX "ioctl"
 #define DM_DRIVER_EMAIL "dm-devel@redhat.com"
@@ -347,6 +349,7 @@ retry:
 			dm_sync_table(md);
 			dm_table_destroy(t);
 		}
+		dm_ima_measure_on_device_remove(md, true);
 		dm_put(md);
 		if (likely(keep_open_devices))
 			dm_destroy(md);
@@ -431,10 +434,10 @@ static struct mapped_device *dm_hash_rename(struct dm_ioctl *param,
 		hc = __get_name_cell(new);
 
 	if (hc) {
-		DMWARN("Unable to change %s on mapped device %s to one that "
-		       "already exists: %s",
-		       change_uuid ? "uuid" : "name",
-		       param->name, new);
+		DMERR("Unable to change %s on mapped device %s to one that "
+		      "already exists: %s",
+		      change_uuid ? "uuid" : "name",
+		      param->name, new);
 		dm_put(hc->md);
 		up_write(&_hash_lock);
 		kfree(new_data);
@@ -446,8 +449,8 @@ static struct mapped_device *dm_hash_rename(struct dm_ioctl *param,
 	 */
 	hc = __get_name_cell(param->name);
 	if (!hc) {
-		DMWARN("Unable to rename non-existent device, %s to %s%s",
-		       param->name, change_uuid ? "uuid " : "", new);
+		DMERR("Unable to rename non-existent device, %s to %s%s",
+		      param->name, change_uuid ? "uuid " : "", new);
 		up_write(&_hash_lock);
 		kfree(new_data);
 		return ERR_PTR(-ENXIO);
@@ -457,9 +460,9 @@ static struct mapped_device *dm_hash_rename(struct dm_ioctl *param,
 	 * Does this device already have a uuid?
 	 */
 	if (change_uuid && hc->uuid) {
-		DMWARN("Unable to change uuid of mapped device %s to %s "
-		       "because uuid is already set to %s",
-		       param->name, new, hc->uuid);
+		DMERR("Unable to change uuid of mapped device %s to %s "
+		      "because uuid is already set to %s",
+		      param->name, new, hc->uuid);
 		dm_put(hc->md);
 		up_write(&_hash_lock);
 		kfree(new_data);
@@ -483,6 +486,9 @@ static struct mapped_device *dm_hash_rename(struct dm_ioctl *param,
 		param->flags |= DM_UEVENT_GENERATED_FLAG;
 
 	md = hc->md;
+
+	dm_ima_measure_on_device_rename(md);
+
 	up_write(&_hash_lock);
 	kfree(old_name);
 
@@ -649,7 +655,7 @@ static void list_version_get_needed(struct target_type *tt, void *needed_param)
     size_t *needed = needed_param;
 
     *needed += sizeof(struct dm_target_versions);
-    *needed += strlen(tt->name);
+    *needed += strlen(tt->name) + 1;
     *needed += ALIGN_MASK;
 }
 
@@ -675,7 +681,7 @@ static void list_version_get_info(struct target_type *tt, void *param)
     strcpy(info->vers->name, tt->name);
 
     info->old_vers = info->vers;
-    info->vers = align_ptr(((void *) ++info->vers) + strlen(tt->name) + 1);
+    info->vers = align_ptr((void *)(info->vers + 1) + strlen(tt->name) + 1);
 }
 
 static int __list_versions(struct dm_ioctl *param, size_t param_size, const char *name)
@@ -714,7 +720,7 @@ static int __list_versions(struct dm_ioctl *param, size_t param_size, const char
 	iter_info.old_vers = NULL;
 	iter_info.vers = vers;
 	iter_info.flags = 0;
-	iter_info.end = (char *)vers+len;
+	iter_info.end = (char *)vers + needed;
 
 	/*
 	 * Now loop through filling out the names & versions.
@@ -744,7 +750,7 @@ static int get_target_version(struct file *filp, struct dm_ioctl *param, size_t 
 static int check_name(const char *name)
 {
 	if (strchr(name, '/')) {
-		DMWARN("invalid device name");
+		DMERR("invalid device name");
 		return -EINVAL;
 	}
 
@@ -767,7 +773,7 @@ static struct dm_table *dm_get_inactive_table(struct mapped_device *md, int *src
 	down_read(&_hash_lock);
 	hc = dm_get_mdptr(md);
 	if (!hc || hc->md != md) {
-		DMWARN("device has been removed from the dev hash table.");
+		DMERR("device has been removed from the dev hash table.");
 		goto out;
 	}
 
@@ -826,7 +832,7 @@ static void __dev_status(struct mapped_device *md, struct dm_ioctl *param)
 		if (!(param->flags & DM_QUERY_INACTIVE_TABLE_FLAG)) {
 			if (get_disk_ro(disk))
 				param->flags |= DM_READONLY_FLAG;
-			param->target_count = dm_table_get_num_targets(table);
+			param->target_count = table->num_targets;
 		}
 
 		param->flags |= DM_ACTIVE_PRESENT_FLAG;
@@ -839,7 +845,7 @@ static void __dev_status(struct mapped_device *md, struct dm_ioctl *param)
 		if (table) {
 			if (!(dm_table_get_mode(table) & FMODE_WRITE))
 				param->flags |= DM_READONLY_FLAG;
-			param->target_count = dm_table_get_num_targets(table);
+			param->target_count = table->num_targets;
 		}
 		dm_put_live_table(md, srcu_idx);
 	}
@@ -885,15 +891,21 @@ static struct hash_cell *__find_device_hash_cell(struct dm_ioctl *param)
 	struct hash_cell *hc = NULL;
 
 	if (*param->uuid) {
-		if (*param->name || param->dev)
+		if (*param->name || param->dev) {
+			DMERR("Invalid ioctl structure: uuid %s, name %s, dev %llx",
+			      param->uuid, param->name, (unsigned long long)param->dev);
 			return NULL;
+		}
 
 		hc = __get_uuid_cell(param->uuid);
 		if (!hc)
 			return NULL;
 	} else if (*param->name) {
-		if (param->dev)
+		if (param->dev) {
+			DMERR("Invalid ioctl structure: name %s, dev %llx",
+			      param->name, (unsigned long long)param->dev);
 			return NULL;
+		}
 
 		hc = __get_name_cell(param->name);
 		if (!hc)
@@ -981,6 +993,8 @@ static int dev_remove(struct file *filp, struct dm_ioctl *param, size_t param_si
 
 	param->flags &= ~DM_DEFERRED_REMOVE;
 
+	dm_ima_measure_on_device_remove(md, false);
+
 	if (!dm_kobject_uevent(md, KOBJ_REMOVE, param->event_nr))
 		param->flags |= DM_UEVENT_GENERATED_FLAG;
 
@@ -1012,7 +1026,7 @@ static int dev_rename(struct file *filp, struct dm_ioctl *param, size_t param_si
 	if (new_data < param->data ||
 	    invalid_str(new_data, (void *) param + param_size) || !*new_data ||
 	    strlen(new_data) > (change_uuid ? DM_UUID_LEN - 1 : DM_NAME_LEN - 1)) {
-		DMWARN("Invalid new mapped device name or uuid string supplied.");
+		DMERR("Invalid new mapped device name or uuid string supplied.");
 		return -EINVAL;
 	}
 
@@ -1047,7 +1061,7 @@ static int dev_set_geometry(struct file *filp, struct dm_ioctl *param, size_t pa
 
 	if (geostr < param->data ||
 	    invalid_str(geostr, (void *) param + param_size)) {
-		DMWARN("Invalid geometry supplied.");
+		DMERR("Invalid geometry supplied.");
 		goto out;
 	}
 
@@ -1055,13 +1069,13 @@ static int dev_set_geometry(struct file *filp, struct dm_ioctl *param, size_t pa
 		   indata + 1, indata + 2, indata + 3, &dummy);
 
 	if (x != 4) {
-		DMWARN("Unable to interpret geometry settings.");
+		DMERR("Unable to interpret geometry settings.");
 		goto out;
 	}
 
 	if (indata[0] > 65535 || indata[1] > 255 ||
 	    indata[2] > 255 || indata[3] > ULONG_MAX) {
-		DMWARN("Geometry exceeds range limits.");
+		DMERR("Geometry exceeds range limits.");
 		goto out;
 	}
 
@@ -1159,8 +1173,12 @@ static int do_resume(struct dm_ioctl *param)
 
 	if (dm_suspended_md(md)) {
 		r = dm_resume(md);
-		if (!r && !dm_kobject_uevent(md, KOBJ_CHANGE, param->event_nr))
-			param->flags |= DM_UEVENT_GENERATED_FLAG;
+		if (!r) {
+			dm_ima_measure_on_device_resume(md, new_map ? true : false);
+
+			if (!dm_kobject_uevent(md, KOBJ_CHANGE, param->event_nr))
+				param->flags |= DM_UEVENT_GENERATED_FLAG;
+		}
 	}
 
 	/*
@@ -1224,11 +1242,13 @@ static void retrieve_status(struct dm_table *table,
 
 	if (param->flags & DM_STATUS_TABLE_FLAG)
 		type = STATUSTYPE_TABLE;
+	else if (param->flags & DM_IMA_MEASUREMENT_FLAG)
+		type = STATUSTYPE_IMA;
 	else
 		type = STATUSTYPE_INFO;
 
 	/* Get all the target info */
-	num_targets = dm_table_get_num_targets(table);
+	num_targets = table->num_targets;
 	for (i = 0; i < num_targets; i++) {
 		struct dm_target *ti = dm_table_get_target(table, i);
 		size_t l;
@@ -1367,7 +1387,7 @@ static int populate_table(struct dm_table *table,
 	char *target_params;
 
 	if (!param->target_count) {
-		DMWARN("populate_table: no targets specified");
+		DMERR("populate_table: no targets specified");
 		return -EINVAL;
 	}
 
@@ -1375,7 +1395,7 @@ static int populate_table(struct dm_table *table,
 
 		r = next_target(spec, next, end, &spec, &target_params);
 		if (r) {
-			DMWARN("unable to find target");
+			DMERR("unable to find target");
 			return r;
 		}
 
@@ -1384,7 +1404,7 @@ static int populate_table(struct dm_table *table,
 					(sector_t) spec->length,
 					target_params);
 		if (r) {
-			DMWARN("error adding target to table");
+			DMERR("error adding target to table");
 			return r;
 		}
 
@@ -1425,29 +1445,28 @@ static int table_load(struct file *filp, struct dm_ioctl *param, size_t param_si
 	if (r)
 		goto err_unlock_md_type;
 
+	dm_ima_measure_on_table_load(t, STATUSTYPE_IMA);
+
 	immutable_target_type = dm_get_immutable_target_type(md);
 	if (immutable_target_type &&
 	    (immutable_target_type != dm_table_get_immutable_target_type(t)) &&
 	    !dm_table_get_wildcard_target(t)) {
-		DMWARN("can't replace immutable target type %s",
-		       immutable_target_type->name);
+		DMERR("can't replace immutable target type %s",
+		      immutable_target_type->name);
 		r = -EINVAL;
 		goto err_unlock_md_type;
 	}
 
 	if (dm_get_md_type(md) == DM_TYPE_NONE) {
-		/* Initial table load: acquire type of table. */
-		dm_set_md_type(md, dm_table_get_type(t));
-
 		/* setup md->queue to reflect md's type (may block) */
 		r = dm_setup_md_queue(md, t);
 		if (r) {
-			DMWARN("unable to set up device queue for new table.");
+			DMERR("unable to set up device queue for new table.");
 			goto err_unlock_md_type;
 		}
 	} else if (!is_valid_type(dm_get_md_type(md), dm_table_get_type(t))) {
-		DMWARN("can't change device type (old=%u vs new=%u) after initial table load.",
-		       dm_get_md_type(md), dm_table_get_type(t));
+		DMERR("can't change device type (old=%u vs new=%u) after initial table load.",
+		      dm_get_md_type(md), dm_table_get_type(t));
 		r = -EINVAL;
 		goto err_unlock_md_type;
 	}
@@ -1458,7 +1477,7 @@ static int table_load(struct file *filp, struct dm_ioctl *param, size_t param_si
 	down_write(&_hash_lock);
 	hc = dm_get_mdptr(md);
 	if (!hc || hc->md != md) {
-		DMWARN("device has been removed from the dev hash table.");
+		DMERR("device has been removed from the dev hash table.");
 		up_write(&_hash_lock);
 		r = -ENXIO;
 		goto err_destroy_table;
@@ -1496,6 +1515,7 @@ static int table_clear(struct file *filp, struct dm_ioctl *param, size_t param_s
 	struct hash_cell *hc;
 	struct mapped_device *md;
 	struct dm_table *old_map = NULL;
+	bool has_new_map = false;
 
 	down_write(&_hash_lock);
 
@@ -1509,6 +1529,7 @@ static int table_clear(struct file *filp, struct dm_ioctl *param, size_t param_s
 	if (hc->new_map) {
 		old_map = hc->new_map;
 		hc->new_map = NULL;
+		has_new_map = true;
 	}
 
 	param->flags &= ~DM_INACTIVE_PRESENT_FLAG;
@@ -1520,6 +1541,7 @@ static int table_clear(struct file *filp, struct dm_ioctl *param, size_t param_s
 		dm_sync_table(md);
 		dm_table_destroy(old_map);
 	}
+	dm_ima_measure_on_table_clear(md, has_new_map);
 	dm_put(md);
 
 	return 0;
@@ -1664,19 +1686,19 @@ static int target_message(struct file *filp, struct dm_ioctl *param, size_t para
 
 	if (tmsg < (struct dm_target_msg *) param->data ||
 	    invalid_str(tmsg->message, (void *) param + param_size)) {
-		DMWARN("Invalid target message parameters.");
+		DMERR("Invalid target message parameters.");
 		r = -EINVAL;
 		goto out;
 	}
 
 	r = dm_split_args(&argc, &argv, tmsg->message);
 	if (r) {
-		DMWARN("Failed to split target message parameters");
+		DMERR("Failed to split target message parameters");
 		goto out;
 	}
 
 	if (!argc) {
-		DMWARN("Empty message received.");
+		DMERR("Empty message received.");
 		r = -EINVAL;
 		goto out_argv;
 	}
@@ -1696,12 +1718,12 @@ static int target_message(struct file *filp, struct dm_ioctl *param, size_t para
 
 	ti = dm_table_find_target(table, tmsg->sector);
 	if (!ti) {
-		DMWARN("Target message sector outside device.");
+		DMERR("Target message sector outside device.");
 		r = -EINVAL;
 	} else if (ti->type->message)
 		r = ti->type->message(ti, argc, argv, result, maxlen);
 	else {
-		DMWARN("Target type does not support messages");
+		DMERR("Target type does not support messages");
 		r = -EINVAL;
 	}
 
@@ -1766,13 +1788,14 @@ static ioctl_fn lookup_ioctl(unsigned int cmd, int *ioctl_flags)
 
 		{DM_TARGET_MSG_CMD, 0, target_message},
 		{DM_DEV_SET_GEOMETRY_CMD, 0, dev_set_geometry},
-		{DM_DEV_ARM_POLL, IOCTL_FLAGS_NO_PARAMS, dev_arm_poll},
-		{DM_GET_TARGET_VERSION, 0, get_target_version},
+		{DM_DEV_ARM_POLL_CMD, IOCTL_FLAGS_NO_PARAMS, dev_arm_poll},
+		{DM_GET_TARGET_VERSION_CMD, 0, get_target_version},
 	};
 
 	if (unlikely(cmd >= ARRAY_SIZE(_ioctls)))
 		return NULL;
 
+	cmd = array_index_nospec(cmd, ARRAY_SIZE(_ioctls));
 	*ioctl_flags = _ioctls[cmd].flags;
 	return _ioctls[cmd].fn;
 }
@@ -1791,11 +1814,11 @@ static int check_version(unsigned int cmd, struct dm_ioctl __user *user)
 
 	if ((DM_VERSION_MAJOR != version[0]) ||
 	    (DM_VERSION_MINOR < version[1])) {
-		DMWARN("ioctl interface mismatch: "
-		       "kernel(%u.%u.%u), user(%u.%u.%u), cmd(%d)",
-		       DM_VERSION_MAJOR, DM_VERSION_MINOR,
-		       DM_VERSION_PATCHLEVEL,
-		       version[0], version[1], version[2], cmd);
+		DMERR("ioctl interface mismatch: "
+		      "kernel(%u.%u.%u), user(%u.%u.%u), cmd(%d)",
+		      DM_VERSION_MAJOR, DM_VERSION_MINOR,
+		      DM_VERSION_PATCHLEVEL,
+		      version[0], version[1], version[2], cmd);
 		r = -EINVAL;
 	}
 
@@ -1834,8 +1857,11 @@ static int copy_params(struct dm_ioctl __user *user, struct dm_ioctl *param_kern
 	if (copy_from_user(param_kernel, user, minimum_data_size))
 		return -EFAULT;
 
-	if (param_kernel->data_size < minimum_data_size)
+	if (param_kernel->data_size < minimum_data_size) {
+		DMERR("Invalid data size in the ioctl structure: %u",
+		      param_kernel->data_size);
 		return -EINVAL;
+	}
 
 	secure_data = param_kernel->flags & DM_SECURE_DATA_FLAG;
 
@@ -1901,11 +1927,11 @@ static int validate_params(uint cmd, struct dm_ioctl *param)
 
 	if (cmd == DM_DEV_CREATE_CMD) {
 		if (!*param->name) {
-			DMWARN("name not supplied when creating device");
+			DMERR("name not supplied when creating device");
 			return -EINVAL;
 		}
 	} else if (*param->uuid && *param->name) {
-		DMWARN("only supply one of name or uuid, cmd(%u)", cmd);
+		DMERR("only supply one of name or uuid, cmd(%u)", cmd);
 		return -EINVAL;
 	}
 
@@ -1952,7 +1978,7 @@ static int ctl_ioctl(struct file *file, uint command, struct dm_ioctl __user *us
 
 	fn = lookup_ioctl(cmd, &ioctl_flags);
 	if (!fn) {
-		DMWARN("dm_ctl_ioctl: unknown command 0x%x", command);
+		DMERR("dm_ctl_ioctl: unknown command 0x%x", command);
 		return -ENOTTY;
 	}
 
@@ -2177,7 +2203,7 @@ int __init dm_early_create(struct dm_ioctl *dmi,
 					(sector_t) spec_array[i]->length,
 					target_params_array[i]);
 		if (r) {
-			DMWARN("error adding target to table");
+			DMERR("error adding target to table");
 			goto err_destroy_table;
 		}
 	}
@@ -2187,11 +2213,10 @@ int __init dm_early_create(struct dm_ioctl *dmi,
 	if (r)
 		goto err_destroy_table;
 
-	md->type = dm_table_get_type(t);
 	/* setup md->queue to reflect md's type (may block) */
 	r = dm_setup_md_queue(md, t);
 	if (r) {
-		DMWARN("unable to set up device queue for new table.");
+		DMERR("unable to set up device queue for new table.");
 		goto err_destroy_table;
 	}
 

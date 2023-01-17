@@ -16,6 +16,7 @@
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
+#include <sound/sof.h>
 #include <sound/soc-acpi.h>
 #include <dt-bindings/sound/cs42l42.h>
 #include "../../codecs/hdac_hdmi.h"
@@ -36,7 +37,37 @@
 #define SOF_CS42L42_NUM_HDMIDEV_MASK		(GENMASK(9, 7))
 #define SOF_CS42L42_NUM_HDMIDEV(quirk)	\
 	(((quirk) << SOF_CS42L42_NUM_HDMIDEV_SHIFT) & SOF_CS42L42_NUM_HDMIDEV_MASK)
-#define SOF_MAX98357A_SPEAKER_AMP_PRESENT	BIT(10)
+#define SOF_CS42L42_DAILINK_SHIFT		10
+#define SOF_CS42L42_DAILINK_MASK		(GENMASK(24, 10))
+#define SOF_CS42L42_DAILINK(link1, link2, link3, link4, link5) \
+	((((link1) | ((link2) << 3) | ((link3) << 6) | ((link4) << 9) | ((link5) << 12)) << SOF_CS42L42_DAILINK_SHIFT) & SOF_CS42L42_DAILINK_MASK)
+#define SOF_BT_OFFLOAD_PRESENT			BIT(25)
+#define SOF_CS42L42_SSP_BT_SHIFT		26
+#define SOF_CS42L42_SSP_BT_MASK			(GENMASK(28, 26))
+#define SOF_CS42L42_SSP_BT(quirk)	\
+	(((quirk) << SOF_CS42L42_SSP_BT_SHIFT) & SOF_CS42L42_SSP_BT_MASK)
+#define SOF_MAX98357A_SPEAKER_AMP_PRESENT	BIT(29)
+#define SOF_MAX98360A_SPEAKER_AMP_PRESENT	BIT(30)
+
+enum {
+	LINK_NONE = 0,
+	LINK_HP = 1,
+	LINK_SPK = 2,
+	LINK_DMIC = 3,
+	LINK_HDMI = 4,
+	LINK_BT = 5,
+};
+
+static struct snd_soc_jack_pin jack_pins[] = {
+	{
+		.pin    = "Headphone Jack",
+		.mask   = SND_JACK_HEADPHONE,
+	},
+	{
+		.pin    = "Headset Mic",
+		.mask   = SND_JACK_MICROPHONE,
+	},
+};
 
 /* Default: SSP2 */
 static unsigned long sof_cs42l42_quirk = SOF_CS42L42_SSP_CODEC(2);
@@ -84,11 +115,13 @@ static int sof_cs42l42_init(struct snd_soc_pcm_runtime *rtd)
 	 * Headset buttons map to the google Reference headset.
 	 * These can be configured by userspace.
 	 */
-	ret = snd_soc_card_jack_new(rtd->card, "Headset Jack",
-				    SND_JACK_HEADSET | SND_JACK_BTN_0 |
-				    SND_JACK_BTN_1 | SND_JACK_BTN_2 |
-				    SND_JACK_BTN_3,
-				    jack, NULL, 0);
+	ret = snd_soc_card_jack_new_pins(rtd->card, "Headset Jack",
+					 SND_JACK_HEADSET | SND_JACK_BTN_0 |
+					 SND_JACK_BTN_1 | SND_JACK_BTN_2 |
+					 SND_JACK_BTN_3,
+					 jack,
+					 jack_pins,
+					 ARRAY_SIZE(jack_pins));
 	if (ret) {
 		dev_err(rtd->dev, "Headset Jack creation failed: %d\n", ret);
 		return ret;
@@ -122,7 +155,12 @@ static int sof_cs42l42_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *codec_dai = asoc_rtd_to_codec(rtd, 0);
 	int clk_freq, ret;
 
-	clk_freq = 3072000; /* BCLK freq */
+	clk_freq = sof_dai_get_bclk(rtd); /* BCLK freq */
+
+	if (clk_freq <= 0) {
+		dev_err(rtd->dev, "get bclk freq failed: %d\n", clk_freq);
+		return -EINVAL;
+	}
 
 	/* Configure sysclk for codec */
 	ret = snd_soc_dai_set_sysclk(codec_dai, 0,
@@ -167,8 +205,7 @@ static int sof_card_late_probe(struct snd_soc_card *card)
 		snprintf(jack_name, sizeof(jack_name),
 			 "HDMI/DP, pcm=%d Jack", pcm->device);
 		err = snd_soc_card_jack_new(card, jack_name,
-					    SND_JACK_AVOUT, &pcm->hdmi_jack,
-					    NULL, 0);
+					    SND_JACK_AVOUT, &pcm->hdmi_jack);
 
 		if (err)
 			return err;
@@ -259,133 +296,175 @@ static struct snd_soc_dai_link_component dmic_component[] = {
 	}
 };
 
-static struct snd_soc_dai_link *sof_card_dai_links_create(struct device *dev,
-							  int ssp_codec,
-							  int ssp_amp,
-							  int dmic_be_num,
-							  int hdmi_num)
-{
-	struct snd_soc_dai_link_component *idisp_components;
-	struct snd_soc_dai_link_component *cpus;
-	struct snd_soc_dai_link *links;
-	int i, id = 0;
+static struct snd_soc_dai_link_component dummy_component[] = {
+	{
+		.name = "snd-soc-dummy",
+		.dai_name = "snd-soc-dummy-dai",
+	}
+};
 
-	links = devm_kzalloc(dev, sizeof(struct snd_soc_dai_link) *
-			     sof_audio_card_cs42l42.num_links, GFP_KERNEL);
-	cpus = devm_kzalloc(dev, sizeof(struct snd_soc_dai_link_component) *
-			     sof_audio_card_cs42l42.num_links, GFP_KERNEL);
-	if (!links || !cpus)
-		goto devm_err;
+static int create_spk_amp_dai_links(struct device *dev,
+				    struct snd_soc_dai_link *links,
+				    struct snd_soc_dai_link_component *cpus,
+				    int *id, int ssp_amp)
+{
+	int ret = 0;
 
 	/* speaker amp */
-	if (sof_cs42l42_quirk & SOF_SPEAKER_AMP_PRESENT) {
-		links[id].name = devm_kasprintf(dev, GFP_KERNEL,
-						"SSP%d-Codec", ssp_amp);
-		if (!links[id].name)
-			goto devm_err;
+	if (!(sof_cs42l42_quirk & SOF_SPEAKER_AMP_PRESENT))
+		return 0;
 
-		links[id].id = id;
-
-		if (sof_cs42l42_quirk & SOF_MAX98357A_SPEAKER_AMP_PRESENT) {
-			max_98357a_dai_link(&links[id]);
-		} else {
-			dev_err(dev, "no amp defined\n");
-			goto devm_err;
-		}
-
-		links[id].platforms = platform_component;
-		links[id].num_platforms = ARRAY_SIZE(platform_component);
-		links[id].dpcm_playback = 1;
-		links[id].no_pcm = 1;
-		links[id].cpus = &cpus[id];
-		links[id].num_cpus = 1;
-
-		links[id].cpus->dai_name = devm_kasprintf(dev, GFP_KERNEL,
-							  "SSP%d Pin",
-							  ssp_amp);
-		if (!links[id].cpus->dai_name)
-			goto devm_err;
-
-		id++;
+	links[*id].name = devm_kasprintf(dev, GFP_KERNEL, "SSP%d-Codec",
+					 ssp_amp);
+	if (!links[*id].name) {
+		ret = -ENOMEM;
+		goto devm_err;
 	}
 
+	links[*id].id = *id;
+
+	if (sof_cs42l42_quirk & SOF_MAX98357A_SPEAKER_AMP_PRESENT) {
+		max_98357a_dai_link(&links[*id]);
+	} else if (sof_cs42l42_quirk & SOF_MAX98360A_SPEAKER_AMP_PRESENT) {
+		max_98360a_dai_link(&links[*id]);
+	} else {
+		dev_err(dev, "no amp defined\n");
+		ret = -EINVAL;
+		goto devm_err;
+	}
+
+	links[*id].platforms = platform_component;
+	links[*id].num_platforms = ARRAY_SIZE(platform_component);
+	links[*id].dpcm_playback = 1;
+	links[*id].no_pcm = 1;
+	links[*id].cpus = &cpus[*id];
+	links[*id].num_cpus = 1;
+
+	links[*id].cpus->dai_name = devm_kasprintf(dev, GFP_KERNEL,
+						   "SSP%d Pin", ssp_amp);
+	if (!links[*id].cpus->dai_name) {
+		ret = -ENOMEM;
+		goto devm_err;
+	}
+
+	(*id)++;
+
+devm_err:
+	return ret;
+}
+
+static int create_hp_codec_dai_links(struct device *dev,
+				     struct snd_soc_dai_link *links,
+				     struct snd_soc_dai_link_component *cpus,
+				     int *id, int ssp_codec)
+{
 	/* codec SSP */
-	links[id].name = devm_kasprintf(dev, GFP_KERNEL,
-					"SSP%d-Codec", ssp_codec);
-	if (!links[id].name)
+	links[*id].name = devm_kasprintf(dev, GFP_KERNEL, "SSP%d-Codec",
+					 ssp_codec);
+	if (!links[*id].name)
 		goto devm_err;
 
-	links[id].id = id;
-	links[id].codecs = cs42l42_component;
-	links[id].num_codecs = ARRAY_SIZE(cs42l42_component);
-	links[id].platforms = platform_component;
-	links[id].num_platforms = ARRAY_SIZE(platform_component);
-	links[id].init = sof_cs42l42_init;
-	links[id].exit = sof_cs42l42_exit;
-	links[id].ops = &sof_cs42l42_ops;
-	links[id].dpcm_playback = 1;
-	links[id].dpcm_capture = 1;
-	links[id].no_pcm = 1;
-	links[id].cpus = &cpus[id];
-	links[id].num_cpus = 1;
+	links[*id].id = *id;
+	links[*id].codecs = cs42l42_component;
+	links[*id].num_codecs = ARRAY_SIZE(cs42l42_component);
+	links[*id].platforms = platform_component;
+	links[*id].num_platforms = ARRAY_SIZE(platform_component);
+	links[*id].init = sof_cs42l42_init;
+	links[*id].exit = sof_cs42l42_exit;
+	links[*id].ops = &sof_cs42l42_ops;
+	links[*id].dpcm_playback = 1;
+	links[*id].dpcm_capture = 1;
+	links[*id].no_pcm = 1;
+	links[*id].cpus = &cpus[*id];
+	links[*id].num_cpus = 1;
 
-	links[id].cpus->dai_name = devm_kasprintf(dev, GFP_KERNEL,
-						  "SSP%d Pin",
-						  ssp_codec);
-	if (!links[id].cpus->dai_name)
+	links[*id].cpus->dai_name = devm_kasprintf(dev, GFP_KERNEL,
+						   "SSP%d Pin",
+						   ssp_codec);
+	if (!links[*id].cpus->dai_name)
 		goto devm_err;
 
-	id++;
+	(*id)++;
+
+	return 0;
+
+devm_err:
+	return -ENOMEM;
+}
+
+static int create_dmic_dai_links(struct device *dev,
+				 struct snd_soc_dai_link *links,
+				 struct snd_soc_dai_link_component *cpus,
+				 int *id, int dmic_be_num)
+{
+	int i;
 
 	/* dmic */
-	if (dmic_be_num > 0) {
-		/* at least we have dmic01 */
-		links[id].name = "dmic01";
-		links[id].cpus = &cpus[id];
-		links[id].cpus->dai_name = "DMIC01 Pin";
-		links[id].init = dmic_init;
-		if (dmic_be_num > 1) {
-			/* set up 2 BE links at most */
-			links[id + 1].name = "dmic16k";
-			links[id + 1].cpus = &cpus[id + 1];
-			links[id + 1].cpus->dai_name = "DMIC16k Pin";
-			dmic_be_num = 2;
-		}
+	if (dmic_be_num <= 0)
+		return 0;
+
+	/* at least we have dmic01 */
+	links[*id].name = "dmic01";
+	links[*id].cpus = &cpus[*id];
+	links[*id].cpus->dai_name = "DMIC01 Pin";
+	links[*id].init = dmic_init;
+	if (dmic_be_num > 1) {
+		/* set up 2 BE links at most */
+		links[*id + 1].name = "dmic16k";
+		links[*id + 1].cpus = &cpus[*id + 1];
+		links[*id + 1].cpus->dai_name = "DMIC16k Pin";
+		dmic_be_num = 2;
 	}
 
 	for (i = 0; i < dmic_be_num; i++) {
-		links[id].id = id;
-		links[id].num_cpus = 1;
-		links[id].codecs = dmic_component;
-		links[id].num_codecs = ARRAY_SIZE(dmic_component);
-		links[id].platforms = platform_component;
-		links[id].num_platforms = ARRAY_SIZE(platform_component);
-		links[id].ignore_suspend = 1;
-		links[id].dpcm_capture = 1;
-		links[id].no_pcm = 1;
-		id++;
+		links[*id].id = *id;
+		links[*id].num_cpus = 1;
+		links[*id].codecs = dmic_component;
+		links[*id].num_codecs = ARRAY_SIZE(dmic_component);
+		links[*id].platforms = platform_component;
+		links[*id].num_platforms = ARRAY_SIZE(platform_component);
+		links[*id].ignore_suspend = 1;
+		links[*id].dpcm_capture = 1;
+		links[*id].no_pcm = 1;
+
+		(*id)++;
 	}
+
+	return 0;
+}
+
+static int create_hdmi_dai_links(struct device *dev,
+				 struct snd_soc_dai_link *links,
+				 struct snd_soc_dai_link_component *cpus,
+				 int *id, int hdmi_num)
+{
+	struct snd_soc_dai_link_component *idisp_components;
+	int i;
 
 	/* HDMI */
-	if (hdmi_num > 0) {
-		idisp_components = devm_kzalloc(dev,
-						sizeof(struct snd_soc_dai_link_component) *
-						hdmi_num, GFP_KERNEL);
-		if (!idisp_components)
-			goto devm_err;
-	}
+	if (hdmi_num <= 0)
+		return 0;
+
+	idisp_components = devm_kcalloc(dev,
+					hdmi_num,
+					sizeof(struct snd_soc_dai_link_component), GFP_KERNEL);
+	if (!idisp_components)
+		goto devm_err;
+
 	for (i = 1; i <= hdmi_num; i++) {
-		links[id].name = devm_kasprintf(dev, GFP_KERNEL,
-						"iDisp%d", i);
-		if (!links[id].name)
+		links[*id].name = devm_kasprintf(dev, GFP_KERNEL,
+						 "iDisp%d", i);
+		if (!links[*id].name)
 			goto devm_err;
 
-		links[id].id = id;
-		links[id].cpus = &cpus[id];
-		links[id].num_cpus = 1;
-		links[id].cpus->dai_name = devm_kasprintf(dev, GFP_KERNEL,
-							  "iDisp%d Pin", i);
-		if (!links[id].cpus->dai_name)
+		links[*id].id = *id;
+		links[*id].cpus = &cpus[*id];
+		links[*id].num_cpus = 1;
+		links[*id].cpus->dai_name = devm_kasprintf(dev,
+							   GFP_KERNEL,
+							   "iDisp%d Pin",
+							   i);
+		if (!links[*id].cpus->dai_name)
 			goto devm_err;
 
 		idisp_components[i - 1].name = "ehdaudio0D2";
@@ -396,14 +475,135 @@ static struct snd_soc_dai_link *sof_card_dai_links_create(struct device *dev,
 		if (!idisp_components[i - 1].dai_name)
 			goto devm_err;
 
-		links[id].codecs = &idisp_components[i - 1];
-		links[id].num_codecs = 1;
-		links[id].platforms = platform_component;
-		links[id].num_platforms = ARRAY_SIZE(platform_component);
-		links[id].init = sof_hdmi_init;
-		links[id].dpcm_playback = 1;
-		links[id].no_pcm = 1;
-		id++;
+		links[*id].codecs = &idisp_components[i - 1];
+		links[*id].num_codecs = 1;
+		links[*id].platforms = platform_component;
+		links[*id].num_platforms = ARRAY_SIZE(platform_component);
+		links[*id].init = sof_hdmi_init;
+		links[*id].dpcm_playback = 1;
+		links[*id].no_pcm = 1;
+
+		(*id)++;
+	}
+
+	return 0;
+
+devm_err:
+	return -ENOMEM;
+}
+
+static int create_bt_offload_dai_links(struct device *dev,
+				       struct snd_soc_dai_link *links,
+				       struct snd_soc_dai_link_component *cpus,
+				       int *id, int ssp_bt)
+{
+	/* bt offload */
+	if (!(sof_cs42l42_quirk & SOF_BT_OFFLOAD_PRESENT))
+		return 0;
+
+	links[*id].name = devm_kasprintf(dev, GFP_KERNEL, "SSP%d-BT",
+					 ssp_bt);
+	if (!links[*id].name)
+		goto devm_err;
+
+	links[*id].id = *id;
+	links[*id].codecs = dummy_component;
+	links[*id].num_codecs = ARRAY_SIZE(dummy_component);
+	links[*id].platforms = platform_component;
+	links[*id].num_platforms = ARRAY_SIZE(platform_component);
+
+	links[*id].dpcm_playback = 1;
+	links[*id].dpcm_capture = 1;
+	links[*id].no_pcm = 1;
+	links[*id].cpus = &cpus[*id];
+	links[*id].num_cpus = 1;
+
+	links[*id].cpus->dai_name = devm_kasprintf(dev, GFP_KERNEL,
+						   "SSP%d Pin",
+						   ssp_bt);
+	if (!links[*id].cpus->dai_name)
+		goto devm_err;
+
+	(*id)++;
+
+	return 0;
+
+devm_err:
+	return -ENOMEM;
+}
+
+static struct snd_soc_dai_link *sof_card_dai_links_create(struct device *dev,
+							  int ssp_codec,
+							  int ssp_amp,
+							  int ssp_bt,
+							  int dmic_be_num,
+							  int hdmi_num)
+{
+	struct snd_soc_dai_link_component *cpus;
+	struct snd_soc_dai_link *links;
+	int ret, id = 0, link_seq;
+
+	links = devm_kcalloc(dev, sof_audio_card_cs42l42.num_links,
+			    sizeof(struct snd_soc_dai_link), GFP_KERNEL);
+	cpus = devm_kcalloc(dev, sof_audio_card_cs42l42.num_links,
+			    sizeof(struct snd_soc_dai_link_component), GFP_KERNEL);
+	if (!links || !cpus)
+		goto devm_err;
+
+	link_seq = (sof_cs42l42_quirk & SOF_CS42L42_DAILINK_MASK) >> SOF_CS42L42_DAILINK_SHIFT;
+
+	while (link_seq) {
+		int link_type = link_seq & 0x07;
+
+		switch (link_type) {
+		case LINK_HP:
+			ret = create_hp_codec_dai_links(dev, links, cpus, &id, ssp_codec);
+			if (ret < 0) {
+				dev_err(dev, "fail to create hp codec dai links, ret %d\n",
+					ret);
+				goto devm_err;
+			}
+			break;
+		case LINK_SPK:
+			ret = create_spk_amp_dai_links(dev, links, cpus, &id, ssp_amp);
+			if (ret < 0) {
+				dev_err(dev, "fail to create spk amp dai links, ret %d\n",
+					ret);
+				goto devm_err;
+			}
+			break;
+		case LINK_DMIC:
+			ret = create_dmic_dai_links(dev, links, cpus, &id, dmic_be_num);
+			if (ret < 0) {
+				dev_err(dev, "fail to create dmic dai links, ret %d\n",
+					ret);
+				goto devm_err;
+			}
+			break;
+		case LINK_HDMI:
+			ret = create_hdmi_dai_links(dev, links, cpus, &id, hdmi_num);
+			if (ret < 0) {
+				dev_err(dev, "fail to create hdmi dai links, ret %d\n",
+					ret);
+				goto devm_err;
+			}
+			break;
+		case LINK_BT:
+			ret = create_bt_offload_dai_links(dev, links, cpus, &id, ssp_bt);
+			if (ret < 0) {
+				dev_err(dev, "fail to create bt offload dai links, ret %d\n",
+					ret);
+				goto devm_err;
+			}
+			break;
+		case LINK_NONE:
+			/* caught here if it's not used as terminator in macro */
+		default:
+			dev_err(dev, "invalid link type %d\n", link_type);
+			goto devm_err;
+		}
+
+		link_seq >>= 3;
 	}
 
 	return links;
@@ -417,7 +617,7 @@ static int sof_audio_probe(struct platform_device *pdev)
 	struct snd_soc_acpi_mach *mach;
 	struct sof_card_private *ctx;
 	int dmic_be_num, hdmi_num;
-	int ret, ssp_amp, ssp_codec;
+	int ret, ssp_bt, ssp_amp, ssp_codec;
 
 	ctx = devm_kzalloc(&pdev->dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
@@ -442,6 +642,9 @@ static int sof_audio_probe(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "sof_cs42l42_quirk = %lx\n", sof_cs42l42_quirk);
 
+	ssp_bt = (sof_cs42l42_quirk & SOF_CS42L42_SSP_BT_MASK) >>
+			SOF_CS42L42_SSP_BT_SHIFT;
+
 	ssp_amp = (sof_cs42l42_quirk & SOF_CS42L42_SSP_AMP_MASK) >>
 			SOF_CS42L42_SSP_AMP_SHIFT;
 
@@ -452,9 +655,11 @@ static int sof_audio_probe(struct platform_device *pdev)
 
 	if (sof_cs42l42_quirk & SOF_SPEAKER_AMP_PRESENT)
 		sof_audio_card_cs42l42.num_links++;
+	if (sof_cs42l42_quirk & SOF_BT_OFFLOAD_PRESENT)
+		sof_audio_card_cs42l42.num_links++;
 
 	dai_links = sof_card_dai_links_create(&pdev->dev, ssp_codec, ssp_amp,
-					      dmic_be_num, hdmi_num);
+					      ssp_bt, dmic_be_num, hdmi_num);
 	if (!dai_links)
 		return -ENOMEM;
 
@@ -484,7 +689,27 @@ static const struct platform_device_id board_ids[] = {
 		.driver_data = (kernel_ulong_t)(SOF_CS42L42_SSP_CODEC(2) |
 					SOF_SPEAKER_AMP_PRESENT |
 					SOF_MAX98357A_SPEAKER_AMP_PRESENT |
-					SOF_CS42L42_SSP_AMP(1)),
+					SOF_CS42L42_SSP_AMP(1)) |
+					SOF_CS42L42_DAILINK(LINK_SPK, LINK_HP, LINK_DMIC, LINK_HDMI, LINK_NONE),
+	},
+	{
+		.name = "jsl_cs4242_mx98360a",
+		.driver_data = (kernel_ulong_t)(SOF_CS42L42_SSP_CODEC(0) |
+					SOF_SPEAKER_AMP_PRESENT |
+					SOF_MAX98360A_SPEAKER_AMP_PRESENT |
+					SOF_CS42L42_SSP_AMP(1)) |
+					SOF_CS42L42_DAILINK(LINK_HP, LINK_DMIC, LINK_HDMI, LINK_SPK, LINK_NONE),
+	},
+	{
+		.name = "adl_mx98360a_cs4242",
+		.driver_data = (kernel_ulong_t)(SOF_CS42L42_SSP_CODEC(0) |
+				SOF_SPEAKER_AMP_PRESENT |
+				SOF_MAX98360A_SPEAKER_AMP_PRESENT |
+				SOF_CS42L42_SSP_AMP(1) |
+				SOF_CS42L42_NUM_HDMIDEV(4) |
+				SOF_BT_OFFLOAD_PRESENT |
+				SOF_CS42L42_SSP_BT(2) |
+				SOF_CS42L42_DAILINK(LINK_HP, LINK_DMIC, LINK_HDMI, LINK_SPK, LINK_BT)),
 	},
 	{ }
 };

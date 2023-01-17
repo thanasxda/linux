@@ -1,15 +1,5 @@
-/*
- * Copyright (C) 2014-2015 Broadcom Corporation
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation version 2.
- *
- * This program is distributed "as is" WITHOUT ANY WARRANTY of any
- * kind, whether express or implied; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2014-2015 Broadcom Corporation
 #include <linux/debugfs.h>
 #include <linux/dma-mapping.h>
 #include <linux/init.h>
@@ -729,7 +719,7 @@ static struct snd_soc_component_driver cygnus_soc_platform = {
 int cygnus_soc_platform_register(struct device *dev,
 				 struct cygnus_audio *cygaud)
 {
-	int rc = 0;
+	int rc;
 
 	dev_dbg(dev, "%s Enter\n", __func__);
 

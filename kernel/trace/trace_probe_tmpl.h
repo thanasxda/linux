@@ -54,7 +54,7 @@ fetch_apply_bitfield(struct fetch_insn *code, void *buf)
  * If dest is NULL, don't store result and return required dynamic data size.
  */
 static int
-process_fetch_insn(struct fetch_insn *code, struct pt_regs *regs,
+process_fetch_insn(struct fetch_insn *code, void *rec,
 		   void *dest, void *base);
 static nokprobe_inline int fetch_store_strlen(unsigned long addr);
 static nokprobe_inline int
@@ -66,6 +66,37 @@ static nokprobe_inline int
 probe_mem_read(void *dest, void *src, size_t size);
 static nokprobe_inline int
 probe_mem_read_user(void *dest, void *src, size_t size);
+
+static nokprobe_inline int
+fetch_store_symstrlen(unsigned long addr)
+{
+	char namebuf[KSYM_SYMBOL_LEN];
+	int ret;
+
+	ret = sprint_symbol(namebuf, addr);
+	if (ret < 0)
+		return 0;
+
+	return ret + 1;
+}
+
+/*
+ * Fetch a null-terminated symbol string + offset. Caller MUST set *(u32 *)buf
+ * with max length and relative data location.
+ */
+static nokprobe_inline int
+fetch_store_symstring(unsigned long addr, void *dest, void *base)
+{
+	int maxlen = get_loc_len(*(u32 *)dest);
+	void *__dest;
+
+	if (unlikely(!maxlen))
+		return -ENOMEM;
+
+	__dest = get_loc_data(dest, base);
+
+	return sprint_symbol(__dest, addr);
+}
 
 /* From the 2nd stage, routine is same */
 static nokprobe_inline int
@@ -99,16 +130,22 @@ stage2:
 stage3:
 	/* 3rd stage: store value to buffer */
 	if (unlikely(!dest)) {
-		if (code->op == FETCH_OP_ST_STRING) {
+		switch (code->op) {
+		case FETCH_OP_ST_STRING:
 			ret = fetch_store_strlen(val + code->offset);
 			code++;
 			goto array;
-		} else if (code->op == FETCH_OP_ST_USTRING) {
+		case FETCH_OP_ST_USTRING:
 			ret += fetch_store_strlen_user(val + code->offset);
 			code++;
 			goto array;
-		} else
+		case FETCH_OP_ST_SYMSTR:
+			ret += fetch_store_symstrlen(val + code->offset);
+			code++;
+			goto array;
+		default:
 			return -EILSEQ;
+		}
 	}
 
 	switch (code->op) {
@@ -128,6 +165,10 @@ stage3:
 	case FETCH_OP_ST_USTRING:
 		loc = *(u32 *)dest;
 		ret = fetch_store_string_user(val + code->offset, dest, base);
+		break;
+	case FETCH_OP_ST_SYMSTR:
+		loc = *(u32 *)dest;
+		ret = fetch_store_symstring(val + code->offset, dest, base);
 		break;
 	default:
 		return -EILSEQ;
@@ -188,7 +229,7 @@ __get_data_size(struct trace_probe *tp, struct pt_regs *regs)
 
 /* Store the value of each argument */
 static nokprobe_inline void
-store_trace_args(void *data, struct trace_probe *tp, struct pt_regs *regs,
+store_trace_args(void *data, struct trace_probe *tp, void *rec,
 		 int header_size, int maxlen)
 {
 	struct probe_arg *arg;
@@ -203,7 +244,7 @@ store_trace_args(void *data, struct trace_probe *tp, struct pt_regs *regs,
 		/* Point the dynamic data area if needed */
 		if (unlikely(arg->dynamic))
 			*dl = make_data_loc(maxlen, dyndata - base);
-		ret = process_fetch_insn(arg->code, regs, dl, base);
+		ret = process_fetch_insn(arg->code, rec, dl, base);
 		if (unlikely(ret < 0 && arg->dynamic)) {
 			*dl = make_data_loc(0, dyndata - base);
 		} else {

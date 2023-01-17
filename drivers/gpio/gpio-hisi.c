@@ -186,8 +186,8 @@ static void hisi_gpio_irq_handler(struct irq_desc *desc)
 
 	chained_irq_enter(irq_c, desc);
 	for_each_set_bit(hwirq, &irq_msk, HISI_GPIO_LINE_NUM_MAX)
-		generic_handle_irq(irq_find_mapping(hisi_gpio->chip.irq.domain,
-						    hwirq));
+		generic_handle_domain_irq(hisi_gpio->chip.irq.domain,
+					  hwirq);
 	chained_irq_exit(irq_c, desc);
 }
 
@@ -220,6 +220,12 @@ static const struct acpi_device_id hisi_gpio_acpi_match[] = {
 	{}
 };
 MODULE_DEVICE_TABLE(acpi, hisi_gpio_acpi_match);
+
+static const struct of_device_id hisi_gpio_dts_match[] = {
+	{ .compatible = "hisilicon,ascend910-gpio", },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, hisi_gpio_dts_match);
 
 static void hisi_gpio_get_pdata(struct device *dev,
 				struct hisi_gpio *hisi_gpio)
@@ -311,6 +317,7 @@ static struct platform_driver hisi_gpio_driver = {
 	.driver		= {
 		.name	= HISI_GPIO_DRIVER_NAME,
 		.acpi_match_table = hisi_gpio_acpi_match,
+		.of_match_table = hisi_gpio_dts_match,
 	},
 	.probe		= hisi_gpio_probe,
 };

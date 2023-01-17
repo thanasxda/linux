@@ -3,7 +3,6 @@
  * Copyright 2020 Noralf Trønnes
  */
 
-#include <linux/dma-buf.h>
 #include <linux/lz4.h>
 #include <linux/usb.h>
 #include <linux/workqueue.h>
@@ -15,13 +14,27 @@
 #include <drm/drm_format_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
-#include <drm/drm_gem_shmem_helper.h>
+#include <drm/drm_gem.h>
+#include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_print.h>
 #include <drm/drm_rect.h>
 #include <drm/drm_simple_kms_helper.h>
 #include <drm/gud.h>
 
 #include "gud_internal.h"
+
+/*
+ * Some userspace rendering loops runs all displays in the same loop.
+ * This means that a fast display will have to wait for a slow one.
+ * For this reason gud does flushing asynchronous by default.
+ * The down side is that in e.g. a single display setup userspace thinks
+ * the display is insanely fast since the driver reports back immediately
+ * that the flush/pageflip is done. This wastes CPU and power.
+ * Such users might want to set this module parameter to false.
+ */
+static bool gud_async_flush = true;
+module_param_named(async_flush, gud_async_flush, bool, 0644);
+MODULE_PARM_DESC(async_flush, "Enable asynchronous flushing [default=true]");
 
 /*
  * FIXME: The driver is probably broken on Big Endian machines.
@@ -46,6 +59,7 @@ static size_t gud_xrgb8888_to_r124(u8 *dst, const struct drm_format_info *format
 	unsigned int bits_per_pixel = 8 / block_width;
 	unsigned int x, y, width, height;
 	u8 pix, *pix8, *block = dst; /* Assign to silence compiler warning */
+	struct iosys_map dst_map, vmap;
 	size_t len;
 	void *buf;
 
@@ -61,7 +75,9 @@ static size_t gud_xrgb8888_to_r124(u8 *dst, const struct drm_format_info *format
 	if (!buf)
 		return 0;
 
-	drm_fb_xrgb8888_to_gray8(buf, src, fb, rect);
+	iosys_map_set_vaddr(&dst_map, buf);
+	iosys_map_set_vaddr(&vmap, src);
+	drm_fb_xrgb8888_to_gray8(&dst_map, NULL, &vmap, fb, rect);
 	pix8 = buf;
 
 	for (y = 0; y < height; y++) {
@@ -92,7 +108,8 @@ static size_t gud_xrgb8888_to_color(u8 *dst, const struct drm_format_info *forma
 	unsigned int bits_per_pixel = 8 / block_width;
 	u8 r, g, b, pix, *block = dst; /* Assign to silence compiler warning */
 	unsigned int x, y, width;
-	u32 *pix32;
+	__le32 *sbuf32;
+	u32 pix32;
 	size_t len;
 
 	/* Start on a byte boundary */
@@ -101,8 +118,8 @@ static size_t gud_xrgb8888_to_color(u8 *dst, const struct drm_format_info *forma
 	len = drm_format_info_min_pitch(format, 0, width) * drm_rect_height(rect);
 
 	for (y = rect->y1; y < rect->y2; y++) {
-		pix32 = src + (y * fb->pitches[0]);
-		pix32 += rect->x1;
+		sbuf32 = src + (y * fb->pitches[0]);
+		sbuf32 += rect->x1;
 
 		for (x = 0; x < width; x++) {
 			unsigned int pixpos = x % block_width; /* within byte from the left */
@@ -113,9 +130,10 @@ static size_t gud_xrgb8888_to_color(u8 *dst, const struct drm_format_info *forma
 				*block = 0;
 			}
 
-			r = *pix32 >> 16;
-			g = *pix32 >> 8;
-			b = *pix32++;
+			pix32 = le32_to_cpu(*sbuf32++);
+			r = pix32 >> 16;
+			g = pix32 >> 8;
+			b = pix32;
 
 			switch (format->format) {
 			case GUD_DRM_FORMAT_XRGB1111:
@@ -139,7 +157,9 @@ static int gud_prep_flush(struct gud_device *gdrm, struct drm_framebuffer *fb,
 {
 	struct dma_buf_attachment *import_attach = fb->obj[0]->import_attach;
 	u8 compression = gdrm->compression;
-	struct dma_buf_map map;
+	struct iosys_map map[DRM_FORMAT_MAX_PLANES];
+	struct iosys_map map_data[DRM_FORMAT_MAX_PLANES];
+	struct iosys_map dst;
 	void *vaddr, *buf;
 	size_t pitch, len;
 	int ret = 0;
@@ -149,22 +169,21 @@ static int gud_prep_flush(struct gud_device *gdrm, struct drm_framebuffer *fb,
 	if (len > gdrm->bulk_len)
 		return -E2BIG;
 
-	ret = drm_gem_shmem_vmap(fb->obj[0], &map);
+	ret = drm_gem_fb_vmap(fb, map, map_data);
 	if (ret)
 		return ret;
 
-	vaddr = map.vaddr + fb->offsets[0];
+	vaddr = map_data[0].vaddr;
 
-	if (import_attach) {
-		ret = dma_buf_begin_cpu_access(import_attach->dmabuf, DMA_FROM_DEVICE);
-		if (ret)
-			goto vunmap;
-	}
+	ret = drm_gem_fb_begin_cpu_access(fb, DMA_FROM_DEVICE);
+	if (ret)
+		goto vunmap;
 retry:
 	if (compression)
 		buf = gdrm->compress_buf;
 	else
 		buf = gdrm->bulk_buf;
+	iosys_map_set_vaddr(&dst, buf);
 
 	/*
 	 * Imported buffers are assumed to be write-combined and thus uncached
@@ -177,18 +196,25 @@ retry:
 				ret = -ENOMEM;
 				goto end_cpu_access;
 			}
+		} else if (format->format == DRM_FORMAT_R8) {
+			drm_fb_xrgb8888_to_gray8(&dst, NULL, map_data, fb, rect);
+		} else if (format->format == DRM_FORMAT_RGB332) {
+			drm_fb_xrgb8888_to_rgb332(&dst, NULL, map_data, fb, rect);
 		} else if (format->format == DRM_FORMAT_RGB565) {
-			drm_fb_xrgb8888_to_rgb565(buf, vaddr, fb, rect, gud_is_big_endian());
+			drm_fb_xrgb8888_to_rgb565(&dst, NULL, map_data, fb, rect,
+						  gud_is_big_endian());
+		} else if (format->format == DRM_FORMAT_RGB888) {
+			drm_fb_xrgb8888_to_rgb888(&dst, NULL, map_data, fb, rect);
 		} else {
 			len = gud_xrgb8888_to_color(buf, format, vaddr, fb, rect);
 		}
 	} else if (gud_is_big_endian() && format->cpp[0] > 1) {
-		drm_fb_swab(buf, vaddr, fb, rect, !import_attach);
+		drm_fb_swab(&dst, NULL, map_data, fb, rect, !import_attach);
 	} else if (compression && !import_attach && pitch == fb->pitches[0]) {
 		/* can compress directly from the framebuffer */
 		buf = vaddr + rect->y1 * pitch;
 	} else {
-		drm_fb_memcpy(buf, vaddr, fb, rect);
+		drm_fb_memcpy(&dst, NULL, map_data, fb, rect);
 	}
 
 	memset(req, 0, sizeof(*req));
@@ -212,10 +238,48 @@ retry:
 	}
 
 end_cpu_access:
-	if (import_attach)
-		dma_buf_end_cpu_access(import_attach->dmabuf, DMA_FROM_DEVICE);
+	drm_gem_fb_end_cpu_access(fb, DMA_FROM_DEVICE);
 vunmap:
-	drm_gem_shmem_vunmap(fb->obj[0], &map);
+	drm_gem_fb_vunmap(fb, map);
+
+	return ret;
+}
+
+struct gud_usb_bulk_context {
+	struct timer_list timer;
+	struct usb_sg_request sgr;
+};
+
+static void gud_usb_bulk_timeout(struct timer_list *t)
+{
+	struct gud_usb_bulk_context *ctx = from_timer(ctx, t, timer);
+
+	usb_sg_cancel(&ctx->sgr);
+}
+
+static int gud_usb_bulk(struct gud_device *gdrm, size_t len)
+{
+	struct gud_usb_bulk_context ctx;
+	int ret;
+
+	ret = usb_sg_init(&ctx.sgr, gud_to_usb_device(gdrm), gdrm->bulk_pipe, 0,
+			  gdrm->bulk_sgt.sgl, gdrm->bulk_sgt.nents, len, GFP_KERNEL);
+	if (ret)
+		return ret;
+
+	timer_setup_on_stack(&ctx.timer, gud_usb_bulk_timeout, 0);
+	mod_timer(&ctx.timer, jiffies + msecs_to_jiffies(3000));
+
+	usb_sg_wait(&ctx.sgr);
+
+	if (!del_timer_sync(&ctx.timer))
+		ret = -ETIMEDOUT;
+	else if (ctx.sgr.status < 0)
+		ret = ctx.sgr.status;
+	else if (ctx.sgr.bytes != len)
+		ret = -EIO;
+
+	destroy_timer_on_stack(&ctx.timer);
 
 	return ret;
 }
@@ -223,10 +287,9 @@ vunmap:
 static int gud_flush_rect(struct gud_device *gdrm, struct drm_framebuffer *fb,
 			  const struct drm_format_info *format, struct drm_rect *rect)
 {
-	struct usb_device *usb = gud_to_usb_device(gdrm);
 	struct gud_set_buffer_req req;
-	int ret, actual_length;
 	size_t len, trlen;
+	int ret;
 
 	drm_dbg(&gdrm->drm, "Flushing [FB:%d] " DRM_RECT_FMT "\n", fb->base.id, DRM_RECT_ARG(rect));
 
@@ -255,10 +318,7 @@ static int gud_flush_rect(struct gud_device *gdrm, struct drm_framebuffer *fb,
 			return ret;
 	}
 
-	ret = usb_bulk_msg(usb, gdrm->bulk_pipe, gdrm->bulk_buf, trlen,
-			   &actual_length, msecs_to_jiffies(3000));
-	if (!ret && trlen != actual_length)
-		ret = -EIO;
+	ret = gud_usb_bulk(gdrm, trlen);
 	if (ret)
 		gdrm->stats_num_errors++;
 
@@ -543,6 +603,8 @@ void gud_pipe_update(struct drm_simple_display_pipe *pipe,
 		if (gdrm->flags & GUD_DISPLAY_FLAG_FULL_UPDATE)
 			drm_rect_init(&damage, 0, 0, fb->width, fb->height);
 		gud_fb_queue_damage(gdrm, fb, &damage);
+		if (!gud_async_flush)
+			flush_work(&gdrm->work);
 	}
 
 	if (!crtc->state->enable)

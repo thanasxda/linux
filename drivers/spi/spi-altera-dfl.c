@@ -104,13 +104,6 @@ static const struct regmap_config indirect_regbus_cfg = {
 	.reg_read = indirect_bus_reg_read,
 };
 
-static struct spi_board_info m10_bmc_info = {
-	.modalias = "m10-d5005",
-	.max_speed_hz = 12500000,
-	.bus_num = 0,
-	.chip_select = 0,
-};
-
 static void config_spi_master(void __iomem *base, struct spi_master *master)
 {
 	u64 v;
@@ -130,17 +123,18 @@ static void config_spi_master(void __iomem *base, struct spi_master *master)
 
 static int dfl_spi_altera_probe(struct dfl_device *dfl_dev)
 {
+	struct spi_board_info board_info = { 0 };
 	struct device *dev = &dfl_dev->dev;
 	struct spi_master *master;
 	struct altera_spi *hw;
 	void __iomem *base;
-	int err = -ENODEV;
+	int err;
 
-	master = spi_alloc_master(dev, sizeof(struct altera_spi));
+	master = devm_spi_alloc_master(dev, sizeof(struct altera_spi));
 	if (!master)
 		return -ENOMEM;
 
-	master->bus_num = dfl_dev->id;
+	master->bus_num = -1;
 
 	hw = spi_master_get_devdata(master);
 
@@ -165,20 +159,25 @@ static int dfl_spi_altera_probe(struct dfl_device *dfl_dev)
 	altera_spi_init_master(master);
 
 	err = devm_spi_register_master(dev, master);
-	if (err) {
-		dev_err(dev, "%s failed to register spi master %d\n", __func__, err);
-		goto exit;
-	}
+	if (err)
+		return dev_err_probe(dev, err, "%s failed to register spi master\n",
+				     __func__);
 
-	if (!spi_new_device(master,  &m10_bmc_info)) {
+	if (dfl_dev->revision == FME_FEATURE_REV_MAX10_SPI_N5010)
+		strscpy(board_info.modalias, "m10-n5010", SPI_NAME_SIZE);
+	else
+		strscpy(board_info.modalias, "m10-d5005", SPI_NAME_SIZE);
+
+	board_info.max_speed_hz = 12500000;
+	board_info.bus_num = 0;
+	board_info.chip_select = 0;
+
+	if (!spi_new_device(master, &board_info)) {
 		dev_err(dev, "%s failed to create SPI device: %s\n",
-			__func__, m10_bmc_info.modalias);
+			__func__, board_info.modalias);
 	}
 
 	return 0;
-exit:
-	spi_master_put(master);
-	return err;
 }
 
 static const struct dfl_device_id dfl_spi_altera_ids[] = {

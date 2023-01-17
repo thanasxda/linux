@@ -14,10 +14,13 @@
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
+
 #include <linux/firmware/xlnx-zynqmp.h>
 
-#include <linux/pinctrl/pinmux.h>
 #include <linux/pinctrl/pinconf-generic.h>
+#include <linux/pinctrl/pinconf.h>
+#include <linux/pinctrl/pinctrl.h>
+#include <linux/pinctrl/pinmux.h>
 
 #include "core.h"
 #include "pinctrl-utils.h"
@@ -163,6 +166,8 @@ static const char *zynqmp_pmux_get_function_name(struct pinctrl_dev *pctldev,
  * @num_groups:	Number of function groups.
  *
  * Get function's group count and group names.
+ *
+ * Return: 0
  */
 static int zynqmp_pmux_get_function_groups(struct pinctrl_dev *pctldev,
 					   unsigned int selector,
@@ -866,15 +871,6 @@ static int zynqmp_pinctrl_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int zynqmp_pinctrl_remove(struct platform_device *pdev)
-{
-	struct zynqmp_pinctrl *pctrl = platform_get_drvdata(pdev);
-
-	pinctrl_unregister(pctrl->pctrl);
-
-	return 0;
-}
-
 static const struct of_device_id zynqmp_pinctrl_of_match[] = {
 	{ .compatible = "xlnx,zynqmp-pinctrl" },
 	{ }
@@ -887,7 +883,6 @@ static struct platform_driver zynqmp_pinctrl_driver = {
 		.of_match_table = zynqmp_pinctrl_of_match,
 	},
 	.probe = zynqmp_pinctrl_probe,
-	.remove = zynqmp_pinctrl_remove,
 };
 module_platform_driver(zynqmp_pinctrl_driver);
 

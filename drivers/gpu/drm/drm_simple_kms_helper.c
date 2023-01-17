@@ -9,8 +9,9 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_drv.h>
+#include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_managed.h>
-#include <drm/drm_plane_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
 
@@ -98,15 +99,17 @@ drm_simple_kms_crtc_mode_valid(struct drm_crtc *crtc,
 static int drm_simple_kms_crtc_check(struct drm_crtc *crtc,
 				     struct drm_atomic_state *state)
 {
-	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
-									  crtc);
-	bool has_primary = crtc_state->plane_mask &
-			   drm_plane_mask(crtc->primary);
+	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
+	int ret;
 
-	/* We always want to have an active plane with an active CRTC */
-	if (has_primary != crtc_state->enable)
-		return -EINVAL;
+	if (!crtc_state->enable)
+		goto out;
 
+	ret = drm_atomic_helper_check_crtc_primary_plane(crtc_state);
+	if (ret)
+		return ret;
+
+out:
 	return drm_atomic_add_affected_planes(state, crtc);
 }
 
@@ -143,6 +146,39 @@ static const struct drm_crtc_helper_funcs drm_simple_kms_crtc_helper_funcs = {
 	.atomic_disable = drm_simple_kms_crtc_disable,
 };
 
+static void drm_simple_kms_crtc_reset(struct drm_crtc *crtc)
+{
+	struct drm_simple_display_pipe *pipe;
+
+	pipe = container_of(crtc, struct drm_simple_display_pipe, crtc);
+	if (!pipe->funcs || !pipe->funcs->reset_crtc)
+		return drm_atomic_helper_crtc_reset(crtc);
+
+	return pipe->funcs->reset_crtc(pipe);
+}
+
+static struct drm_crtc_state *drm_simple_kms_crtc_duplicate_state(struct drm_crtc *crtc)
+{
+	struct drm_simple_display_pipe *pipe;
+
+	pipe = container_of(crtc, struct drm_simple_display_pipe, crtc);
+	if (!pipe->funcs || !pipe->funcs->duplicate_crtc_state)
+		return drm_atomic_helper_crtc_duplicate_state(crtc);
+
+	return pipe->funcs->duplicate_crtc_state(pipe);
+}
+
+static void drm_simple_kms_crtc_destroy_state(struct drm_crtc *crtc, struct drm_crtc_state *state)
+{
+	struct drm_simple_display_pipe *pipe;
+
+	pipe = container_of(crtc, struct drm_simple_display_pipe, crtc);
+	if (!pipe->funcs || !pipe->funcs->destroy_crtc_state)
+		drm_atomic_helper_crtc_destroy_state(crtc, state);
+	else
+		pipe->funcs->destroy_crtc_state(pipe, state);
+}
+
 static int drm_simple_kms_crtc_enable_vblank(struct drm_crtc *crtc)
 {
 	struct drm_simple_display_pipe *pipe;
@@ -166,12 +202,12 @@ static void drm_simple_kms_crtc_disable_vblank(struct drm_crtc *crtc)
 }
 
 static const struct drm_crtc_funcs drm_simple_kms_crtc_funcs = {
-	.reset = drm_atomic_helper_crtc_reset,
+	.reset = drm_simple_kms_crtc_reset,
 	.destroy = drm_crtc_cleanup,
 	.set_config = drm_atomic_helper_set_config,
 	.page_flip = drm_atomic_helper_page_flip,
-	.atomic_duplicate_state = drm_atomic_helper_crtc_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_crtc_destroy_state,
+	.atomic_duplicate_state = drm_simple_kms_crtc_duplicate_state,
+	.atomic_destroy_state = drm_simple_kms_crtc_destroy_state,
 	.enable_vblank = drm_simple_kms_crtc_enable_vblank,
 	.disable_vblank = drm_simple_kms_crtc_disable_vblank,
 };
@@ -190,9 +226,9 @@ static int drm_simple_kms_plane_atomic_check(struct drm_plane *plane,
 						   &pipe->crtc);
 
 	ret = drm_atomic_helper_check_plane_state(plane_state, crtc_state,
-						  DRM_PLANE_HELPER_NO_SCALING,
-						  DRM_PLANE_HELPER_NO_SCALING,
-						  false, true);
+						  DRM_PLANE_NO_SCALING,
+						  DRM_PLANE_NO_SCALING,
+						  false, false);
 	if (ret)
 		return ret;
 
@@ -225,8 +261,14 @@ static int drm_simple_kms_plane_prepare_fb(struct drm_plane *plane,
 	struct drm_simple_display_pipe *pipe;
 
 	pipe = container_of(plane, struct drm_simple_display_pipe, plane);
-	if (!pipe->funcs || !pipe->funcs->prepare_fb)
-		return 0;
+	if (!pipe->funcs || !pipe->funcs->prepare_fb) {
+		if (WARN_ON_ONCE(!drm_core_check_feature(plane->dev, DRIVER_GEM)))
+			return 0;
+
+		WARN_ON_ONCE(pipe->funcs && pipe->funcs->cleanup_fb);
+
+		return drm_gem_simple_display_pipe_prepare_fb(pipe, state);
+	}
 
 	return pipe->funcs->prepare_fb(pipe, state);
 }
@@ -243,6 +285,30 @@ static void drm_simple_kms_plane_cleanup_fb(struct drm_plane *plane,
 	pipe->funcs->cleanup_fb(pipe, state);
 }
 
+static int drm_simple_kms_plane_begin_fb_access(struct drm_plane *plane,
+						struct drm_plane_state *new_plane_state)
+{
+	struct drm_simple_display_pipe *pipe;
+
+	pipe = container_of(plane, struct drm_simple_display_pipe, plane);
+	if (!pipe->funcs || !pipe->funcs->begin_fb_access)
+		return 0;
+
+	return pipe->funcs->begin_fb_access(pipe, new_plane_state);
+}
+
+static void drm_simple_kms_plane_end_fb_access(struct drm_plane *plane,
+					       struct drm_plane_state *new_plane_state)
+{
+	struct drm_simple_display_pipe *pipe;
+
+	pipe = container_of(plane, struct drm_simple_display_pipe, plane);
+	if (!pipe->funcs || !pipe->funcs->end_fb_access)
+		return;
+
+	pipe->funcs->end_fb_access(pipe, new_plane_state);
+}
+
 static bool drm_simple_kms_format_mod_supported(struct drm_plane *plane,
 						uint32_t format,
 						uint64_t modifier)
@@ -253,6 +319,8 @@ static bool drm_simple_kms_format_mod_supported(struct drm_plane *plane,
 static const struct drm_plane_helper_funcs drm_simple_kms_plane_helper_funcs = {
 	.prepare_fb = drm_simple_kms_plane_prepare_fb,
 	.cleanup_fb = drm_simple_kms_plane_cleanup_fb,
+	.begin_fb_access = drm_simple_kms_plane_begin_fb_access,
+	.end_fb_access = drm_simple_kms_plane_end_fb_access,
 	.atomic_check = drm_simple_kms_plane_atomic_check,
 	.atomic_update = drm_simple_kms_plane_atomic_update,
 };

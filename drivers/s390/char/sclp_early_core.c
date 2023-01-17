@@ -17,7 +17,7 @@
 
 static struct read_info_sccb __bootdata(sclp_info_sccb);
 static int __bootdata(sclp_info_sccb_valid);
-char *sclp_early_sccb = (char *) EARLY_SCCB_OFFSET;
+char *__bootdata_preserved(sclp_early_sccb);
 int sclp_init_state = sclp_init_state_uninitialized;
 /*
  * Used to keep track of the size of the event masks. Qemu until version 2.11
@@ -211,6 +211,11 @@ static int sclp_early_setup(int disable, int *have_linemode, int *have_vt220)
 	return rc;
 }
 
+void sclp_early_set_buffer(void *sccb)
+{
+	sclp_early_sccb = sccb;
+}
+
 /*
  * Output one or more lines of text on the SCLP console (VT220 and /
  * or line-mode).
@@ -235,11 +240,44 @@ void sclp_early_printk(const char *str)
 	__sclp_early_printk(str, strlen(str));
 }
 
+/*
+ * Use sclp_emergency_printk() to print a string when the system is in a
+ * state where regular console drivers cannot be assumed to work anymore.
+ *
+ * Callers must make sure that no concurrent SCLP requests are outstanding
+ * and all other CPUs are stopped, or at least disabled for external
+ * interrupts.
+ */
+void sclp_emergency_printk(const char *str)
+{
+	int have_linemode, have_vt220;
+	unsigned int len;
+
+	len = strlen(str);
+	/*
+	 * Don't care about return values; if requests fail, just ignore and
+	 * continue to have a rather high chance that anything is printed.
+	 */
+	sclp_early_setup(0, &have_linemode, &have_vt220);
+	sclp_early_print_lm(str, len);
+	sclp_early_print_vt220(str, len);
+	sclp_early_setup(1, &have_linemode, &have_vt220);
+}
+
+/*
+ * We can't pass sclp_info_sccb to sclp_early_cmd() here directly,
+ * because it might not fulfil the requiremets for a SCLP communication buffer:
+ *   - lie below 2G in memory
+ *   - be page-aligned
+ * Therefore, we use the buffer sclp_early_sccb (which fulfils all those
+ * requirements) temporarily for communication and copy a received response
+ * back into the buffer sclp_info_sccb upon successful completion.
+ */
 int __init sclp_early_read_info(void)
 {
 	int i;
 	int length = test_facility(140) ? EXT_SCCB_READ_SCP : PAGE_SIZE;
-	struct read_info_sccb *sccb = &sclp_info_sccb;
+	struct read_info_sccb *sccb = (struct read_info_sccb *)sclp_early_sccb;
 	sclp_cmdw_t commands[] = {SCLP_CMDW_READ_SCP_INFO_FORCED,
 				  SCLP_CMDW_READ_SCP_INFO};
 
@@ -251,6 +289,7 @@ int __init sclp_early_read_info(void)
 		if (sclp_early_cmd(commands[i], sccb))
 			break;
 		if (sccb->header.response_code == 0x10) {
+			memcpy(&sclp_info_sccb, sccb, length);
 			sclp_info_sccb_valid = 1;
 			return 0;
 		}

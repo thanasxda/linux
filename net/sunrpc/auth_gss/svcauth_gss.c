@@ -49,11 +49,36 @@
 #include <linux/sunrpc/svcauth.h>
 #include <linux/sunrpc/svcauth_gss.h>
 #include <linux/sunrpc/cache.h>
+#include <linux/sunrpc/gss_krb5.h>
 
 #include <trace/events/rpcgss.h>
 
 #include "gss_rpc_upcall.h"
 
+/*
+ * Unfortunately there isn't a maximum checksum size exported via the
+ * GSS API. Manufacture one based on GSS mechanisms supported by this
+ * implementation.
+ */
+#define GSS_MAX_CKSUMSIZE (GSS_KRB5_TOK_HDR_LEN + GSS_KRB5_MAX_CKSUM_LEN)
+
+/*
+ * This value may be increased in the future to accommodate other
+ * usage of the scratch buffer.
+ */
+#define GSS_SCRATCH_SIZE GSS_MAX_CKSUMSIZE
+
+struct gss_svc_data {
+	/* decoded gss client cred: */
+	struct rpc_gss_wire_cred	clcred;
+	/* save a pointer to the beginning of the encoded verifier,
+	 * for use in encryption/checksumming in svcauth_gss_release: */
+	__be32				*verf_start;
+	struct rsc			*rsci;
+
+	/* for temporary results */
+	u8				gsd_scratch[GSS_SCRATCH_SIZE];
+};
 
 /* The rpcsec_init cache is used for mapping RPCSEC_GSS_{,CONT_}INIT requests
  * into replies.
@@ -194,6 +219,8 @@ static void rsi_request(struct cache_detail *cd,
 	qword_addhex(bpp, blen, rsii->in_handle.data, rsii->in_handle.len);
 	qword_addhex(bpp, blen, rsii->in_token.data, rsii->in_token.len);
 	(*bpp)[-1] = '\n';
+	WARN_ONCE(*blen < 0,
+		  "RPCSEC/GSS credential too large - please use gssproxy\n");
 }
 
 static int rsi_parse(struct cache_detail *cd,
@@ -643,7 +670,7 @@ static bool gss_check_seq_num(const struct svc_rqst *rqstp, struct rsc *rsci,
 		}
 		__set_bit(seq_num % GSS_SEQ_WIN, sd->sd_win);
 		goto ok;
-	} else if (seq_num <= sd->sd_max - GSS_SEQ_WIN) {
+	} else if (seq_num + GSS_SEQ_WIN <= sd->sd_max) {
 		goto toolow;
 	}
 	if (__test_and_set_bit(seq_num % GSS_SEQ_WIN, sd->sd_win))
@@ -707,11 +734,11 @@ svc_safe_putnetobj(struct kvec *resv, struct xdr_netobj *o)
 /*
  * Verify the checksum on the header and return SVC_OK on success.
  * Otherwise, return SVC_DROP (in the case of a bad sequence number)
- * or return SVC_DENIED and indicate error in authp.
+ * or return SVC_DENIED and indicate error in rqstp->rq_auth_stat.
  */
 static int
 gss_verify_header(struct svc_rqst *rqstp, struct rsc *rsci,
-		  __be32 *rpcstart, struct rpc_gss_wire_cred *gc, __be32 *authp)
+		  __be32 *rpcstart, struct rpc_gss_wire_cred *gc)
 {
 	struct gss_ctx		*ctx_id = rsci->mechctx;
 	struct xdr_buf		rpchdr;
@@ -725,7 +752,7 @@ gss_verify_header(struct svc_rqst *rqstp, struct rsc *rsci,
 	iov.iov_len = (u8 *)argv->iov_base - (u8 *)rpcstart;
 	xdr_buf_from_iov(&iov, &rpchdr);
 
-	*authp = rpc_autherr_badverf;
+	rqstp->rq_auth_stat = rpc_autherr_badverf;
 	if (argv->iov_len < 4)
 		return SVC_DENIED;
 	flavor = svc_getnl(argv);
@@ -737,13 +764,13 @@ gss_verify_header(struct svc_rqst *rqstp, struct rsc *rsci,
 	if (rqstp->rq_deferred) /* skip verification of revisited request */
 		return SVC_OK;
 	if (gss_verify_mic(ctx_id, &rpchdr, &checksum) != GSS_S_COMPLETE) {
-		*authp = rpcsec_gsserr_credproblem;
+		rqstp->rq_auth_stat = rpcsec_gsserr_credproblem;
 		return SVC_DENIED;
 	}
 
 	if (gc->gc_seq > MAXSEQ) {
 		trace_rpcgss_svc_seqno_large(rqstp, gc->gc_seq);
-		*authp = rpcsec_gsserr_ctxproblem;
+		rqstp->rq_auth_stat = rpcsec_gsserr_ctxproblem;
 		return SVC_DENIED;
 	}
 	if (!gss_check_seq_num(rqstp, rsci, gc->gc_seq))
@@ -779,7 +806,7 @@ gss_write_verf(struct svc_rqst *rqstp, struct gss_ctx *ctx_id, u32 seq)
 	svc_putnl(rqstp->rq_res.head, RPC_AUTH_GSS);
 	xdr_seq = kmalloc(4, GFP_KERNEL);
 	if (!xdr_seq)
-		return -1;
+		return -ENOMEM;
 	*xdr_seq = htonl(seq);
 
 	iov.iov_base = xdr_seq;
@@ -885,12 +912,10 @@ read_u32_from_xdr_buf(struct xdr_buf *buf, int base, u32 *obj)
 static int
 unwrap_integ_data(struct svc_rqst *rqstp, struct xdr_buf *buf, u32 seq, struct gss_ctx *ctx)
 {
+	struct gss_svc_data *gsd = rqstp->rq_auth_data;
 	u32 integ_len, rseqno, maj_stat;
-	int stat = -EINVAL;
 	struct xdr_netobj mic;
 	struct xdr_buf integ_buf;
-
-	mic.data = NULL;
 
 	/* NFS READ normally uses splice to send data in-place. However
 	 * the data in cache can change after the reply's MIC is computed
@@ -915,11 +940,9 @@ unwrap_integ_data(struct svc_rqst *rqstp, struct xdr_buf *buf, u32 seq, struct g
 	/* copy out mic... */
 	if (read_u32_from_xdr_buf(buf, integ_len, &mic.len))
 		goto unwrap_failed;
-	if (mic.len > RPC_MAX_AUTH_SIZE)
+	if (mic.len > sizeof(gsd->gsd_scratch))
 		goto unwrap_failed;
-	mic.data = kmalloc(mic.len, GFP_KERNEL);
-	if (!mic.data)
-		goto unwrap_failed;
+	mic.data = gsd->gsd_scratch;
 	if (read_bytes_from_xdr_buf(buf, integ_len + 4, mic.data, mic.len))
 		goto unwrap_failed;
 	maj_stat = gss_verify_mic(ctx, &integ_buf, &mic);
@@ -930,20 +953,17 @@ unwrap_integ_data(struct svc_rqst *rqstp, struct xdr_buf *buf, u32 seq, struct g
 		goto bad_seqno;
 	/* trim off the mic and padding at the end before returning */
 	xdr_buf_trim(buf, round_up_to_quad(mic.len) + 4);
-	stat = 0;
-out:
-	kfree(mic.data);
-	return stat;
+	return 0;
 
 unwrap_failed:
 	trace_rpcgss_svc_unwrap_failed(rqstp);
-	goto out;
+	return -EINVAL;
 bad_seqno:
 	trace_rpcgss_svc_seqno_bad(rqstp, seq, rseqno);
-	goto out;
+	return -EINVAL;
 bad_mic:
 	trace_rpcgss_svc_mic(rqstp, maj_stat);
-	goto out;
+	return -EINVAL;
 }
 
 static inline int
@@ -1021,15 +1041,6 @@ bad_unwrap:
 	return -EINVAL;
 }
 
-struct gss_svc_data {
-	/* decoded gss client cred: */
-	struct rpc_gss_wire_cred	clcred;
-	/* save a pointer to the beginning of the encoded verifier,
-	 * for use in encryption/checksumming in svcauth_gss_release: */
-	__be32				*verf_start;
-	struct rsc			*rsci;
-};
-
 static int
 svcauth_gss_set_client(struct svc_rqst *rqstp)
 {
@@ -1037,6 +1048,8 @@ svcauth_gss_set_client(struct svc_rqst *rqstp)
 	struct rsc *rsci = svcdata->rsci;
 	struct rpc_gss_wire_cred *gc = &svcdata->clcred;
 	int stat;
+
+	rqstp->rq_auth_stat = rpc_autherr_badcred;
 
 	/*
 	 * A gss export can be specified either by:
@@ -1053,6 +1066,8 @@ svcauth_gss_set_client(struct svc_rqst *rqstp)
 	stat = svcauth_unix_set_client(rqstp);
 	if (stat == SVC_DROP || stat == SVC_CLOSE)
 		return stat;
+
+	rqstp->rq_auth_stat = rpc_auth_ok;
 	return SVC_OK;
 }
 
@@ -1142,7 +1157,7 @@ static void gss_free_in_token_pages(struct gssp_in_token *in_token)
 }
 
 static int gss_read_proxy_verf(struct svc_rqst *rqstp,
-			       struct rpc_gss_wire_cred *gc, __be32 *authp,
+			       struct rpc_gss_wire_cred *gc,
 			       struct xdr_netobj *in_handle,
 			       struct gssp_in_token *in_token)
 {
@@ -1151,23 +1166,28 @@ static int gss_read_proxy_verf(struct svc_rqst *rqstp,
 	int pages, i, res, pgto, pgfrom;
 	size_t inlen, to_offs, from_offs;
 
-	res = gss_read_common_verf(gc, argv, authp, in_handle);
+	res = gss_read_common_verf(gc, argv, &rqstp->rq_auth_stat, in_handle);
 	if (res)
 		return res;
 
 	inlen = svc_getnl(argv);
-	if (inlen > (argv->iov_len + rqstp->rq_arg.page_len))
+	if (inlen > (argv->iov_len + rqstp->rq_arg.page_len)) {
+		kfree(in_handle->data);
 		return SVC_DENIED;
+	}
 
 	pages = DIV_ROUND_UP(inlen, PAGE_SIZE);
 	in_token->pages = kcalloc(pages, sizeof(struct page *), GFP_KERNEL);
-	if (!in_token->pages)
+	if (!in_token->pages) {
+		kfree(in_handle->data);
 		return SVC_DENIED;
+	}
 	in_token->page_base = 0;
 	in_token->page_len = inlen;
 	for (i = 0; i < pages; i++) {
 		in_token->pages[i] = alloc_page(GFP_KERNEL);
 		if (!in_token->pages[i]) {
+			kfree(in_handle->data);
 			gss_free_in_token_pages(in_token);
 			return SVC_DENIED;
 		}
@@ -1227,7 +1247,7 @@ gss_write_resv(struct kvec *resv, size_t size_limit,
  * Otherwise, drop the request pending an answer to the upcall.
  */
 static int svcauth_gss_legacy_init(struct svc_rqst *rqstp,
-			struct rpc_gss_wire_cred *gc, __be32 *authp)
+				   struct rpc_gss_wire_cred *gc)
 {
 	struct kvec *argv = &rqstp->rq_arg.head[0];
 	struct kvec *resv = &rqstp->rq_res.head[0];
@@ -1236,7 +1256,7 @@ static int svcauth_gss_legacy_init(struct svc_rqst *rqstp,
 	struct sunrpc_net *sn = net_generic(SVC_NET(rqstp), sunrpc_net_id);
 
 	memset(&rsikey, 0, sizeof(rsikey));
-	ret = gss_read_verf(gc, argv, authp,
+	ret = gss_read_verf(gc, argv, &rqstp->rq_auth_stat,
 			    &rsikey.in_handle, &rsikey.in_token);
 	if (ret)
 		return ret;
@@ -1339,7 +1359,7 @@ out:
 }
 
 static int svcauth_gss_proxy_init(struct svc_rqst *rqstp,
-			struct rpc_gss_wire_cred *gc, __be32 *authp)
+				  struct rpc_gss_wire_cred *gc)
 {
 	struct kvec *resv = &rqstp->rq_res.head[0];
 	struct xdr_netobj cli_handle;
@@ -1351,8 +1371,7 @@ static int svcauth_gss_proxy_init(struct svc_rqst *rqstp,
 	struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);
 
 	memset(&ud, 0, sizeof(ud));
-	ret = gss_read_proxy_verf(rqstp, gc, authp,
-				  &ud.in_handle, &ud.in_token);
+	ret = gss_read_proxy_verf(rqstp, gc, &ud.in_handle, &ud.in_token);
 	if (ret)
 		return ret;
 
@@ -1428,7 +1447,7 @@ static bool use_gss_proxy(struct net *net)
 static ssize_t write_gssp(struct file *file, const char __user *buf,
 			 size_t count, loff_t *ppos)
 {
-	struct net *net = PDE_DATA(file_inode(file));
+	struct net *net = pde_data(file_inode(file));
 	char tbuf[20];
 	unsigned long i;
 	int res;
@@ -1456,7 +1475,7 @@ static ssize_t write_gssp(struct file *file, const char __user *buf,
 static ssize_t read_gssp(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
-	struct net *net = PDE_DATA(file_inode(file));
+	struct net *net = pde_data(file_inode(file));
 	struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);
 	unsigned long p = *ppos;
 	char tbuf[10];
@@ -1525,7 +1544,7 @@ static void destroy_use_gss_proxy_proc_entry(struct net *net) {}
  * response here and return SVC_COMPLETE.
  */
 static int
-svcauth_gss_accept(struct svc_rqst *rqstp, __be32 *authp)
+svcauth_gss_accept(struct svc_rqst *rqstp)
 {
 	struct kvec	*argv = &rqstp->rq_arg.head[0];
 	struct kvec	*resv = &rqstp->rq_res.head[0];
@@ -1538,7 +1557,7 @@ svcauth_gss_accept(struct svc_rqst *rqstp, __be32 *authp)
 	int		ret;
 	struct sunrpc_net *sn = net_generic(SVC_NET(rqstp), sunrpc_net_id);
 
-	*authp = rpc_autherr_badcred;
+	rqstp->rq_auth_stat = rpc_autherr_badcred;
 	if (!svcdata)
 		svcdata = kmalloc(sizeof(*svcdata), GFP_KERNEL);
 	if (!svcdata)
@@ -1575,22 +1594,22 @@ svcauth_gss_accept(struct svc_rqst *rqstp, __be32 *authp)
 	if ((gc->gc_proc != RPC_GSS_PROC_DATA) && (rqstp->rq_proc != 0))
 		goto auth_err;
 
-	*authp = rpc_autherr_badverf;
+	rqstp->rq_auth_stat = rpc_autherr_badverf;
 	switch (gc->gc_proc) {
 	case RPC_GSS_PROC_INIT:
 	case RPC_GSS_PROC_CONTINUE_INIT:
 		if (use_gss_proxy(SVC_NET(rqstp)))
-			return svcauth_gss_proxy_init(rqstp, gc, authp);
+			return svcauth_gss_proxy_init(rqstp, gc);
 		else
-			return svcauth_gss_legacy_init(rqstp, gc, authp);
+			return svcauth_gss_legacy_init(rqstp, gc);
 	case RPC_GSS_PROC_DATA:
 	case RPC_GSS_PROC_DESTROY:
 		/* Look up the context, and check the verifier: */
-		*authp = rpcsec_gsserr_credproblem;
+		rqstp->rq_auth_stat = rpcsec_gsserr_credproblem;
 		rsci = gss_svc_searchbyctx(sn->rsc_cache, &gc->gc_ctx);
 		if (!rsci)
 			goto auth_err;
-		switch (gss_verify_header(rqstp, rsci, rpcstart, gc, authp)) {
+		switch (gss_verify_header(rqstp, rsci, rpcstart, gc)) {
 		case SVC_OK:
 			break;
 		case SVC_DENIED:
@@ -1600,7 +1619,7 @@ svcauth_gss_accept(struct svc_rqst *rqstp, __be32 *authp)
 		}
 		break;
 	default:
-		*authp = rpc_autherr_rejectedcred;
+		rqstp->rq_auth_stat = rpc_autherr_rejectedcred;
 		goto auth_err;
 	}
 
@@ -1616,13 +1635,13 @@ svcauth_gss_accept(struct svc_rqst *rqstp, __be32 *authp)
 		svc_putnl(resv, RPC_SUCCESS);
 		goto complete;
 	case RPC_GSS_PROC_DATA:
-		*authp = rpcsec_gsserr_ctxproblem;
+		rqstp->rq_auth_stat = rpcsec_gsserr_ctxproblem;
 		svcdata->verf_start = resv->iov_base + resv->iov_len;
 		if (gss_write_verf(rqstp, rsci->mechctx, gc->gc_seq))
 			goto auth_err;
 		rqstp->rq_cred = rsci->cred;
 		get_group_info(rsci->cred.cr_group_info);
-		*authp = rpc_autherr_badcred;
+		rqstp->rq_auth_stat = rpc_autherr_badcred;
 		switch (gc->gc_svc) {
 		case RPC_GSS_SVC_NONE:
 			break;
@@ -1980,7 +1999,7 @@ gss_svc_init_net(struct net *net)
 		goto out2;
 	return 0;
 out2:
-	destroy_use_gss_proxy_proc_entry(net);
+	rsi_cache_destroy_net(net);
 out1:
 	rsc_cache_destroy_net(net);
 	return rv;

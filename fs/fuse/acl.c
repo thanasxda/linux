@@ -11,13 +11,16 @@
 #include <linux/posix_acl.h>
 #include <linux/posix_acl_xattr.h>
 
-struct posix_acl *fuse_get_acl(struct inode *inode, int type)
+struct posix_acl *fuse_get_acl(struct inode *inode, int type, bool rcu)
 {
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	int size;
 	const char *name;
 	void *value = NULL;
 	struct posix_acl *acl;
+
+	if (rcu)
+		return ERR_PTR(-ECHILD);
 
 	if (fuse_is_bad(inode))
 		return ERR_PTR(-EIO);
@@ -50,9 +53,10 @@ struct posix_acl *fuse_get_acl(struct inode *inode, int type)
 	return acl;
 }
 
-int fuse_set_acl(struct user_namespace *mnt_userns, struct inode *inode,
+int fuse_set_acl(struct user_namespace *mnt_userns, struct dentry *dentry,
 		 struct posix_acl *acl, int type)
 {
+	struct inode *inode = d_inode(dentry);
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	const char *name;
 	int ret;
@@ -95,7 +99,7 @@ int fuse_set_acl(struct user_namespace *mnt_userns, struct inode *inode,
 			return ret;
 		}
 
-		if (!in_group_p(i_gid_into_mnt(&init_user_ns, inode)) &&
+		if (!vfsgid_in_group_p(i_gid_into_vfsgid(&init_user_ns, inode)) &&
 		    !capable_wrt_inode_uidgid(&init_user_ns, inode, CAP_FSETID))
 			extra_flags |= FUSE_SETXATTR_ACL_KILL_SGID;
 

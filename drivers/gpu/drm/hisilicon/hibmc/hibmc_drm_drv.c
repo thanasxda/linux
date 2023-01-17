@@ -17,10 +17,11 @@
 #include <drm/drm_aperture.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
+#include <drm/drm_fbdev_generic.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_gem_vram_helper.h>
-#include <drm/drm_irq.h>
 #include <drm/drm_managed.h>
+#include <drm/drm_module.h>
 #include <drm/drm_vblank.h>
 
 #include "hibmc_drm_drv.h"
@@ -28,7 +29,7 @@
 
 DEFINE_DRM_GEM_FOPS(hibmc_fops);
 
-static irqreturn_t hibmc_drm_interrupt(int irq, void *arg)
+static irqreturn_t hibmc_interrupt(int irq, void *arg)
 {
 	struct drm_device *dev = (struct drm_device *)arg;
 	struct hibmc_drm_private *priv = to_hibmc_drm_private(dev);
@@ -63,7 +64,6 @@ static const struct drm_driver hibmc_driver = {
 	.dumb_create            = hibmc_dumb_create,
 	.dumb_map_offset        = drm_gem_ttm_dumb_map_offset,
 	.gem_prime_mmap		= drm_gem_prime_mmap,
-	.irq_handler		= hibmc_drm_interrupt,
 };
 
 static int __maybe_unused hibmc_pm_suspend(struct device *dev)
@@ -106,7 +106,6 @@ static int hibmc_kms_init(struct hibmc_drm_private *priv)
 	dev->mode_config.max_width = 1920;
 	dev->mode_config.max_height = 1200;
 
-	dev->mode_config.fb_base = priv->fb_base;
 	dev->mode_config.preferred_depth = 32;
 	dev->mode_config.prefer_shadow = 1;
 
@@ -213,7 +212,7 @@ static int hibmc_hw_map(struct hibmc_drm_private *priv)
 {
 	struct drm_device *dev = &priv->dev;
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
-	resource_size_t addr, size, ioaddr, iosize;
+	resource_size_t ioaddr, iosize;
 
 	ioaddr = pci_resource_start(pdev, 1);
 	iosize = pci_resource_len(pdev, 1);
@@ -222,16 +221,6 @@ static int hibmc_hw_map(struct hibmc_drm_private *priv)
 		drm_err(dev, "Cannot map mmio region\n");
 		return -ENOMEM;
 	}
-
-	addr = pci_resource_start(pdev, 0);
-	size = pci_resource_len(pdev, 0);
-	priv->fb_map = devm_ioremap(dev->dev, addr, size);
-	if (!priv->fb_map) {
-		drm_err(dev, "Cannot map framebuffer\n");
-		return -ENOMEM;
-	}
-	priv->fb_base = addr;
-	priv->fb_size = size;
 
 	return 0;
 }
@@ -251,10 +240,11 @@ static int hibmc_hw_init(struct hibmc_drm_private *priv)
 
 static int hibmc_unload(struct drm_device *dev)
 {
+	struct pci_dev *pdev = to_pci_dev(dev->dev);
+
 	drm_atomic_helper_shutdown(dev);
 
-	if (dev->irq_enabled)
-		drm_irq_uninstall(dev);
+	free_irq(pdev->irq, dev);
 
 	pci_disable_msi(to_pci_dev(dev->dev));
 
@@ -271,7 +261,8 @@ static int hibmc_load(struct drm_device *dev)
 	if (ret)
 		goto err;
 
-	ret = drmm_vram_helper_init(dev, pci_resource_start(pdev, 0), priv->fb_size);
+	ret = drmm_vram_helper_init(dev, pci_resource_start(pdev, 0),
+				    pci_resource_len(pdev, 0));
 	if (ret) {
 		drm_err(dev, "Error initializing VRAM MM; %d\n", ret);
 		goto err;
@@ -291,7 +282,9 @@ static int hibmc_load(struct drm_device *dev)
 	if (ret) {
 		drm_warn(dev, "enabling MSI failed: %d\n", ret);
 	} else {
-		ret = drm_irq_install(dev, pdev->irq);
+		/* PCI devices require shared interrupts. */
+		ret = request_irq(pdev->irq, hibmc_interrupt, IRQF_SHARED,
+				  dev->driver->name, dev);
 		if (ret)
 			drm_warn(dev, "install irq failed: %d\n", ret);
 	}
@@ -314,7 +307,7 @@ static int hibmc_pci_probe(struct pci_dev *pdev,
 	struct drm_device *dev;
 	int ret;
 
-	ret = drm_aperture_remove_conflicting_pci_framebuffers(pdev, "hibmcdrmfb");
+	ret = drm_aperture_remove_conflicting_pci_framebuffers(pdev, &hibmc_driver);
 	if (ret)
 		return ret;
 
@@ -378,7 +371,7 @@ static struct pci_driver hibmc_pci_driver = {
 	.driver.pm =    &hibmc_pm_ops,
 };
 
-module_pci_driver(hibmc_pci_driver);
+drm_module_pci_driver(hibmc_pci_driver);
 
 MODULE_DEVICE_TABLE(pci, hibmc_pci_table);
 MODULE_AUTHOR("RongrongZou <zourongrong@huawei.com>");

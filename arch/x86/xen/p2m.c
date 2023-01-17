@@ -134,11 +134,6 @@ static inline unsigned p2m_mid_index(unsigned long pfn)
 	return (pfn / P2M_PER_PAGE) % P2M_MID_PER_PAGE;
 }
 
-static inline unsigned p2m_index(unsigned long pfn)
-{
-	return pfn % P2M_PER_PAGE;
-}
-
 static void p2m_top_mfn_init(unsigned long *top)
 {
 	unsigned i;
@@ -197,7 +192,7 @@ static void * __ref alloc_p2m_page(void)
 static void __ref free_p2m_page(void *p)
 {
 	if (unlikely(!slab_is_available())) {
-		memblock_free((unsigned long)p, PAGE_SIZE);
+		memblock_free(p, PAGE_SIZE);
 		return;
 	}
 
@@ -618,8 +613,8 @@ int xen_alloc_p2m_entry(unsigned long pfn)
 	}
 
 	/* Expanded the p2m? */
-	if (pfn > xen_p2m_last_pfn) {
-		xen_p2m_last_pfn = pfn;
+	if (pfn >= xen_p2m_last_pfn) {
+		xen_p2m_last_pfn = ALIGN(pfn + 1, P2M_PER_PAGE);
 		HYPERVISOR_shared_info->arch.max_pfn = xen_p2m_last_pfn;
 	}
 

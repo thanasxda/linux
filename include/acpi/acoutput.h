@@ -3,7 +3,7 @@
  *
  * Name: acoutput.h -- debug output
  *
- * Copyright (C) 2000 - 2021, Intel Corp.
+ * Copyright (C) 2000 - 2022, Intel Corp.
  *
  *****************************************************************************/
 
@@ -415,7 +415,7 @@
 /* Conditional execution */
 
 #define ACPI_DEBUG_EXEC(a)              a
-#define ACPI_DEBUG_ONLY_MEMBERS(a)      a;
+#define ACPI_DEBUG_ONLY_MEMBERS(a)      a
 #define _VERBOSE_STRUCTURES
 
 /* Various object display routines for debug */

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Copyright 2021, NXP Semiconductors
+/* Copyright 2021 NXP
  */
 #include <linux/pcs/pcs-xpcs.h>
 #include <linux/of_mdio.h>
@@ -256,6 +256,9 @@ static int sja1105_base_tx_mdio_read(struct mii_bus *bus, int phy, int reg)
 	u32 tmp;
 	int rc;
 
+	if (reg & MII_ADDR_C45)
+		return -EOPNOTSUPP;
+
 	rc = sja1105_xfer_u32(priv, SPI_READ, regs->mdio_100base_tx + reg,
 			      &tmp, NULL);
 	if (rc < 0)
@@ -272,6 +275,9 @@ static int sja1105_base_tx_mdio_write(struct mii_bus *bus, int phy, int reg,
 	const struct sja1105_regs *regs = priv->info->regs;
 	u32 tmp = val;
 
+	if (reg & MII_ADDR_C45)
+		return -EOPNOTSUPP;
+
 	return sja1105_xfer_u32(priv, SPI_WRITE, regs->mdio_100base_tx + reg,
 				&tmp, NULL);
 }
@@ -284,8 +290,7 @@ static int sja1105_mdiobus_base_tx_register(struct sja1105_private *priv,
 	struct mii_bus *bus;
 	int rc = 0;
 
-	np = of_find_compatible_node(mdio_node, NULL,
-				     "nxp,sja1110-base-tx-mdio");
+	np = of_get_compatible_child(mdio_node, "nxp,sja1110-base-tx-mdio");
 	if (!np)
 		return 0;
 
@@ -339,8 +344,7 @@ static int sja1105_mdiobus_base_t1_register(struct sja1105_private *priv,
 	struct mii_bus *bus;
 	int rc = 0;
 
-	np = of_find_compatible_node(mdio_node, NULL,
-				     "nxp,sja1110-base-t1-mdio");
+	np = of_get_compatible_child(mdio_node, "nxp,sja1110-base-t1-mdio");
 	if (!np)
 		return 0;
 

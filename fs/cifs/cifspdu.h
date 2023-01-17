@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LGPL-2.1 */
 /*
- *   fs/cifs/cifspdu.h
  *
  *   Copyright (c) International Business Machines  Corp., 2002,2009
  *   Author(s): Steve French (sfrench@us.ibm.com)
@@ -12,15 +11,9 @@
 
 #include <net/sock.h>
 #include <asm/unaligned.h>
-#include "smbfsctl.h"
+#include "../smbfs_common/smbfsctl.h"
 
-#ifdef CONFIG_CIFS_WEAK_PW_HASH
-#define LANMAN_PROT 0
-#define LANMAN2_PROT 1
-#define CIFS_PROT   2
-#else
 #define CIFS_PROT   0
-#endif
 #define POSIX_PROT  (CIFS_PROT+1)
 #define BAD_PROT 0xFFFF
 
@@ -130,18 +123,6 @@
  */
 #define CIFS_SESS_KEY_SIZE (16)
 
-/*
- * Size of the smb3 signing key
- */
-#define SMB3_SIGN_KEY_SIZE (16)
-
-/*
- * Size of the smb3 encryption/decryption key storage.
- * This size is big enough to store any cipher key types.
- */
-#define SMB3_ENC_DEC_KEY_SIZE (32)
-
-#define CIFS_CLIENT_CHALLENGE_SIZE (8)
 #define CIFS_SERVER_CHALLENGE_SIZE (8)
 #define CIFS_HMAC_MD5_HASH_SIZE (16)
 #define CIFS_CPHTXT_SIZE (16)
@@ -502,32 +483,10 @@ put_bcc(__u16 count, struct smb_hdr *hdr)
 typedef struct negotiate_req {
 	struct smb_hdr hdr;	/* wct = 0 */
 	__le16 ByteCount;
-	unsigned char DialectsArray[1];
+	unsigned char DialectsArray[];
 } __attribute__((packed)) NEGOTIATE_REQ;
 
-/* Dialect index is 13 for LANMAN */
-
 #define MIN_TZ_ADJ (15 * 60) /* minimum grid for timezones in seconds */
-
-typedef struct lanman_neg_rsp {
-	struct smb_hdr hdr;	/* wct = 13 */
-	__le16 DialectIndex;
-	__le16 SecurityMode;
-	__le16 MaxBufSize;
-	__le16 MaxMpxCount;
-	__le16 MaxNumberVcs;
-	__le16 RawMode;
-	__le32 SessionKey;
-	struct {
-		__le16 Time;
-		__le16 Date;
-	} __attribute__((packed)) SrvTime;
-	__le16 ServerTimeZone;
-	__le16 EncryptionKeyLength;
-	__le16 Reserved;
-	__u16  ByteCount;
-	unsigned char EncryptionKey[1];
-} __attribute__((packed)) LANMAN_NEG_RSP;
 
 #define READ_RAW_ENABLE 1
 #define WRITE_RAW_ENABLE 2
@@ -549,13 +508,14 @@ typedef struct negotiate_rsp {
 	__u8 EncryptionKeyLength;
 	__u16 ByteCount;
 	union {
-		unsigned char EncryptionKey[1];	/* cap extended security off */
+		/* cap extended security off */
+		DECLARE_FLEX_ARRAY(unsigned char, EncryptionKey);
 		/* followed by Domain name - if extended security is off */
 		/* followed by 16 bytes of server GUID */
 		/* then security blob if cap_extended_security negotiated */
 		struct {
 			unsigned char GUID[SMB1_CLIENT_GUID_SIZE];
-			unsigned char SecurityBlob[1];
+			unsigned char SecurityBlob[];
 		} __attribute__((packed)) extended_response;
 	} __attribute__((packed)) u;
 } __attribute__((packed)) NEGOTIATE_RSP;
@@ -1469,7 +1429,7 @@ typedef struct smb_com_transaction_change_notify_req {
 	__u8 WatchTree;  /* 1 = Monitor subdirectories */
 	__u8 Reserved2;
 	__le16 ByteCount;
-/* 	__u8 Pad[3];*/
+/*	__u8 Pad[3];*/
 /*	__u8 Data[1];*/
 } __attribute__((packed)) TRANSACT_CHANGE_NOTIFY_REQ;
 
@@ -1687,7 +1647,7 @@ struct smb_t2_rsp {
 #define SMB_FIND_FILE_ID_FULL_DIR_INFO    0x105
 #define SMB_FIND_FILE_ID_BOTH_DIR_INFO    0x106
 #define SMB_FIND_FILE_UNIX                0x202
-#define SMB_FIND_FILE_POSIX_INFO          0x064
+/* #define SMB_FIND_FILE_POSIX_INFO          0x064 */
 
 typedef struct smb_com_transaction2_qpi_req {
 	struct smb_hdr hdr;	/* wct = 14+ */
@@ -1792,8 +1752,7 @@ struct smb_com_transaction2_sfi_rsp {
 	struct smb_hdr hdr;	/* wct = 10 + SetupCount */
 	struct trans2_resp t2;
 	__u16 ByteCount;
-	__u16 Reserved2;	/* parameter word reserved -
-					present for infolevels > 100 */
+	__u16 Reserved2; /* parameter word reserved - present for infolevels > 100 */
 } __attribute__((packed));
 
 struct smb_t2_qfi_req {
@@ -1808,8 +1767,7 @@ struct smb_t2_qfi_rsp {
 	struct smb_hdr hdr;     /* wct = 10 + SetupCount */
 	struct trans2_resp t2;
 	__u16 ByteCount;
-	__u16 Reserved2;        /* parameter word reserved -
-				   present for infolevels > 100 */
+	__u16 Reserved2; /* parameter word reserved - present for infolevels > 100 */
 } __attribute__((packed));
 
 /*
@@ -2186,13 +2144,11 @@ typedef struct {
 #define CIFS_UNIX_POSIX_PATH_OPS_CAP    0x00000020 /* Allow new POSIX path based
 						      calls including posix open
 						      and posix unlink */
-#define CIFS_UNIX_LARGE_READ_CAP        0x00000040 /* support reads >128K (up
-						      to 0xFFFF00 */
+#define CIFS_UNIX_LARGE_READ_CAP        0x00000040 /* support reads >128K (up to 0xFFFF00 */
 #define CIFS_UNIX_LARGE_WRITE_CAP       0x00000080
 #define CIFS_UNIX_TRANSPORT_ENCRYPTION_CAP 0x00000100 /* can do SPNEGO crypt */
 #define CIFS_UNIX_TRANSPORT_ENCRYPTION_MANDATORY_CAP  0x00000200 /* must do  */
-#define CIFS_UNIX_PROXY_CAP             0x00000400 /* Proxy cap: 0xACE ioctl and
-						      QFS PROXY call */
+#define CIFS_UNIX_PROXY_CAP             0x00000400 /* Proxy cap: 0xACE ioctl and QFS PROXY call */
 #ifdef CONFIG_CIFS_POSIX
 /* presumably don't need the 0x20 POSIX_PATH_OPS_CAP since we never send
    LockingX instead of posix locking call on unix sess (and we do not expect
@@ -2408,8 +2364,7 @@ typedef struct {
 
 struct file_allocation_info {
 	__le64 AllocationSize; /* Note old Samba srvr rounds this up too much */
-} __attribute__((packed));	/* size used on disk, for level 0x103 for set,
-				   0x105 for query */
+} __packed; /* size used on disk, for level 0x103 for set, 0x105 for query */
 
 struct file_end_of_file_info {
 	__le64 FileSize;		/* offset to end of file */
@@ -2449,8 +2404,7 @@ struct cifs_posix_acl { /* access conrol list  (ACL) */
 	__le16	access_entry_count;  /* access ACL - count of entries */
 	__le16	default_entry_count; /* default ACL - count of entries */
 	struct cifs_posix_ace ace_array[];
-	/* followed by
-	struct cifs_posix_ace default_ace_arraay[] */
+	/* followed by struct cifs_posix_ace default_ace_array[] */
 } __attribute__((packed));  /* level 0x204 */
 
 /* types of access control entries already defined in posix_acl.h */
@@ -2469,17 +2423,17 @@ struct cifs_posix_acl { /* access conrol list  (ACL) */
 /* end of POSIX ACL definitions */
 
 /* POSIX Open Flags */
-#define SMB_O_RDONLY 	 0x1
-#define SMB_O_WRONLY 	0x2
-#define SMB_O_RDWR 	0x4
-#define SMB_O_CREAT 	0x10
-#define SMB_O_EXCL 	0x20
-#define SMB_O_TRUNC 	0x40
-#define SMB_O_APPEND 	0x80
-#define SMB_O_SYNC 	0x100
-#define SMB_O_DIRECTORY 0x200
-#define SMB_O_NOFOLLOW 	0x400
-#define SMB_O_DIRECT 	0x800
+#define SMB_O_RDONLY	0x1
+#define SMB_O_WRONLY	0x2
+#define SMB_O_RDWR	0x4
+#define SMB_O_CREAT	0x10
+#define SMB_O_EXCL	0x20
+#define SMB_O_TRUNC	0x40
+#define SMB_O_APPEND	0x80
+#define SMB_O_SYNC	0x100
+#define SMB_O_DIRECTORY	0x200
+#define SMB_O_NOFOLLOW	0x400
+#define SMB_O_DIRECT	0x800
 
 typedef struct {
 	__le32 OpenFlags; /* same as NT CreateX */
@@ -2589,7 +2543,7 @@ typedef struct {
 	__le32 EaSize; /* length of the xattrs */
 	__u8   ShortNameLength;
 	__u8   Reserved;
-	__u8   ShortName[12];
+	__u8   ShortName[24];
 	char FileName[1];
 } __attribute__((packed)) FILE_BOTH_DIRECTORY_INFO; /* level 0x104 FFrsp data */
 
@@ -2756,15 +2710,13 @@ typedef struct file_xattr_info {
 	__u32 xattr_value_len;
 	char  xattr_name[];
 	/* followed by xattr_value[xattr_value_len], no pad */
-} __attribute__((packed)) FILE_XATTR_INFO; /* extended attribute info
-					      level 0x205 */
+} __packed FILE_XATTR_INFO; /* extended attribute info level 0x205 */
 
 /* flags for lsattr and chflags commands removed arein uapi/linux/fs.h */
 
 typedef struct file_chattr_info {
 	__le64	mask; /* list of all possible attribute bits */
 	__le64	mode; /* list of actual attribute bits on this inode */
-} __attribute__((packed)) FILE_CHATTR_INFO;  /* ext attributes
-						(chattr, chflags) level 0x206 */
-#endif 				/* POSIX */
+} __packed FILE_CHATTR_INFO;  /* ext attributes (chattr, chflags) level 0x206 */
+#endif				/* POSIX */
 #endif				/* _CIFSPDU_H */

@@ -44,6 +44,7 @@
 
 MODULE_FIRMWARE("amdgpu/vega10_sos.bin");
 MODULE_FIRMWARE("amdgpu/vega10_asd.bin");
+MODULE_FIRMWARE("amdgpu/vega10_cap.bin");
 MODULE_FIRMWARE("amdgpu/vega12_sos.bin");
 MODULE_FIRMWARE("amdgpu/vega12_asd.bin");
 
@@ -103,7 +104,7 @@ static int psp_v3_1_bootloader_load_sysdrv(struct psp_context *psp)
 		return ret;
 
 	/* Copy PSP System Driver binary to memory */
-	psp_copy_fw(psp, psp->sys_start_addr, psp->sys_bin_size);
+	psp_copy_fw(psp, psp->sys.start_addr, psp->sys.size_bytes);
 
 	/* Provide the sys driver to bootloader */
 	WREG32_SOC15(MP0, 0, mmMP0_SMN_C2PMSG_36,
@@ -142,7 +143,7 @@ static int psp_v3_1_bootloader_load_sos(struct psp_context *psp)
 		return ret;
 
 	/* Copy Secure OS binary to PSP memory */
-	psp_copy_fw(psp, psp->sos_start_addr, psp->sos_bin_size);
+	psp_copy_fw(psp, psp->sos.start_addr, psp->sos.size_bytes);
 
 	/* Provide the PSP secure OS to bootloader */
 	WREG32_SOC15(MP0, 0, mmMP0_SMN_C2PMSG_36,
@@ -157,32 +158,6 @@ static int psp_v3_1_bootloader_load_sos(struct psp_context *psp)
 			   RREG32_SOC15(MP0, 0, mmMP0_SMN_C2PMSG_81),
 			   0, true);
 	return ret;
-}
-
-static int psp_v3_1_ring_init(struct psp_context *psp,
-			      enum psp_ring_type ring_type)
-{
-	int ret = 0;
-	struct psp_ring *ring;
-	struct amdgpu_device *adev = psp->adev;
-
-	ring = &psp->km_ring;
-
-	ring->ring_type = ring_type;
-
-	/* allocate 4k Page of Local Frame Buffer memory for ring */
-	ring->ring_size = 0x1000;
-	ret = amdgpu_bo_create_kernel(adev, ring->ring_size, PAGE_SIZE,
-				      AMDGPU_GEM_DOMAIN_VRAM,
-				      &adev->firmware.rbuf,
-				      &ring->ring_mem_mc_addr,
-				      (void **)&ring->ring_mem);
-	if (ret) {
-		ring->ring_size = 0;
-		return ret;
-	}
-
-	return 0;
 }
 
 static void psp_v3_1_reroute_ih(struct psp_context *psp)
@@ -400,7 +375,6 @@ static const struct psp_funcs psp_v3_1_funcs = {
 	.init_microcode = psp_v3_1_init_microcode,
 	.bootloader_load_sysdrv = psp_v3_1_bootloader_load_sysdrv,
 	.bootloader_load_sos = psp_v3_1_bootloader_load_sos,
-	.ring_init = psp_v3_1_ring_init,
 	.ring_create = psp_v3_1_ring_create,
 	.ring_stop = psp_v3_1_ring_stop,
 	.ring_destroy = psp_v3_1_ring_destroy,

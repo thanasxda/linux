@@ -124,6 +124,8 @@ static_assert(sizeof(struct ionic_vf_setattr_cmd) == 64);
 static_assert(sizeof(struct ionic_vf_setattr_comp) == 16);
 static_assert(sizeof(struct ionic_vf_getattr_cmd) == 64);
 static_assert(sizeof(struct ionic_vf_getattr_comp) == 16);
+static_assert(sizeof(struct ionic_vf_ctrl_cmd) == 64);
+static_assert(sizeof(struct ionic_vf_ctrl_comp) == 16);
 #endif /* __CHECKER__ */
 
 struct ionic_devinfo {
@@ -143,6 +145,7 @@ struct ionic_dev {
 	u32 last_fw_hb;
 	bool fw_hb_ready;
 	bool fw_status_ready;
+	u8 fw_generation;
 
 	u64 __iomem *db_pages;
 	dma_addr_t phy_db_pages;
@@ -160,8 +163,6 @@ struct ionic_dev {
 struct ionic_cq_info {
 	union {
 		void *cq_desc;
-		struct ionic_txq_comp *txcq;
-		struct ionic_rxq_comp *rxcq;
 		struct ionic_admin_comp *admincq;
 		struct ionic_notifyq_event *notifyq;
 	};
@@ -221,9 +222,6 @@ struct ionic_queue {
 	unsigned int num_descs;
 	unsigned int max_sg_elems;
 	u64 features;
-	u64 dbell_count;
-	u64 stop;
-	u64 wake;
 	u64 drop;
 	struct ionic_dev *idev;
 	unsigned int type;
@@ -270,7 +268,6 @@ struct ionic_cq {
 	bool done_color;
 	unsigned int num_descs;
 	unsigned int desc_size;
-	u64 compl_count;
 	void *base;
 	dma_addr_t base_pa;
 } ____cacheline_aligned_in_smp;
@@ -323,9 +320,13 @@ void ionic_dev_cmd_port_autoneg(struct ionic_dev *idev, u8 an_enable);
 void ionic_dev_cmd_port_fec(struct ionic_dev *idev, u8 fec_type);
 void ionic_dev_cmd_port_pause(struct ionic_dev *idev, u8 pause_type);
 
-int ionic_set_vf_config(struct ionic *ionic, int vf, u8 attr, u8 *data);
+int ionic_set_vf_config(struct ionic *ionic, int vf,
+			struct ionic_vf_setattr_cmd *vfc);
+int ionic_dev_cmd_vf_getattr(struct ionic *ionic, int vf, u8 attr,
+			     struct ionic_vf_getattr_comp *comp);
 void ionic_dev_cmd_queue_identify(struct ionic_dev *idev,
 				  u16 lif_type, u8 qtype, u8 qver);
+void ionic_vf_start(struct ionic *ionic);
 void ionic_dev_cmd_lif_identify(struct ionic_dev *idev, u8 type, u8 ver);
 void ionic_dev_cmd_lif_init(struct ionic_dev *idev, u16 lif_index,
 			    dma_addr_t addr);
@@ -358,5 +359,6 @@ void ionic_q_rewind(struct ionic_queue *q, struct ionic_desc_info *start);
 void ionic_q_service(struct ionic_queue *q, struct ionic_cq_info *cq_info,
 		     unsigned int stop_index);
 int ionic_heartbeat_check(struct ionic *ionic);
+bool ionic_is_fw_running(struct ionic_dev *idev);
 
 #endif /* _IONIC_DEV_H_ */
