@@ -5,6 +5,8 @@ SUBLEVEL = 0
 EXTRAVERSION = -rc4
 NAME = Hurr durr I'ma ninja sloth
 
+
+
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
 # More info can be located in ./README
@@ -463,13 +465,81 @@ HOSTRUSTC = rustc
 HOSTPKG_CONFIG	= pkg-config
 
 ###malaka
-export KBUILD_USERCFLAGS := -Wall -Wmissing-prototypes -Wstrict-prototypes \
-			      -O3 -fomit-frame-pointer -std=gnu89
-export KBUILD_USERLDFLAGS := -O3 -ffast-math -pipe -fPIE -march=native -mtune=native \
---param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -Wformat-security -fno-semantic-interposition \
--fno-signed-zeros -fno-strict-aliasing -fno-trapping-math -m64 -pthread -Wformat-security -fno-stack-protector -fwrapv -funroll-loops -ftree-vectorize -fforce-addr
+
+
+export LDFLAGS_MODULE= --strip-debug
+
+export LDFLAGS= -O3 -plugin-opt=-function-sections -plugin-opt=-data-sections -plugin-opt=new-pass-manager -plugin-opt=O3 -plugin-opt=mcpu=native -plugin LLVMPolly.so --gc-sections -ffast-math -pipe -fPIE -march=native -mtune=native --param=ssp-buffer-size=32 -D_FORTIFY_SOURCE=2 -D_REENTRANT -fassociative-math -fasynchronous-unwind-tables -feliminate-unused-debug-types -fno-semantic-interposition -fno-signed-zeros -fno-strict-aliasing -fno-trapping-math -m64 -pthread -Wnoformat-security -fno-stack-protector -fwrapv -funroll-loops -ftree-vectorize -fforce-addr
+
+export KBUILD_USERCFLAGS:= -Wall -Wmissing-prototypes \
+                           -Wstrict-prototypes \
+                           -O3 -fomit-frame-pointer 
+
+export KBUILD_CFLAGS+=  -mllvm -polly \
+                        -mllvm -polly-run-inliner \
+                        -mllvm -polly-opt-fusion=max \
+                        -mllvm -polly-omp-backend=LLVM \
+                        -mllvm -polly-scheduling=dynamic \
+                        -mllvm -polly-scheduling-chunksize=1 \
+                        -mllvm -polly-opt-maximize-bands=yes \
+                        -mllvm -polly-ast-detect-parallel \
+                        -mllvm -polly-ast-use-context \
+                        -mllvm -polly-opt-simplify-deps=no \
+                        -mllvm -polly-rtc-max-arrays-per-group=40 \
+                        -mllvm -polly-parallel 
+                        
+                        export LDFLAGS+=-plugin LLVMPolly.so
+
+export KBUILD_CFLAGS+= --param=ssp-buffer-size=32 \
+        -D_FORTIFY_SOURCE=2 \
+        -D_REENTRANT \
+        -fassociative-math \
+        -fasynchronous-unwind-tables \
+        -feliminate-unused-debug-types \
+        -fexceptions \
+        -ffast-math \
+        -fforce-addr \
+        -fno-semantic-interposition \
+        -fno-signed-zeros \
+        -fno-stack-protector \
+        -fno-strict-aliasing \
+        -fno-trapping-math \
+        -fomit-frame-pointer \
+        -fopenmp \
+        -ftree-vectorize \
+        -funroll-loops \
+        -fwrapv \
+        -g \
+        -lcrypt \
+        -ldl \
+        -lhmmer \
+        -lm \
+        -lncurses \
+        -lpgcommon \
+        -lpgport \
+        -lpq \
+        -lpthread \
+        -lrt \
+        -lsquid \
+        -m64 \
+        -mabi=native \
+        -mcpu=native \
+        -mfloat-abi=native \
+        -mfpu=native \
+        -mtune=native \
+        -O3 \
+        -pipe \
+        -pthread \
+        -Wall \
+        -Wno-error \
+        -Wno-format-security \
+        -Wno-frame-address \
+        -Wno-maybe-uninitialized \
+        -Wno-trigraphs \
+        -Wundef
+
 KBUILD_USERHOSTCFLAGS := -Wall -Wmissing-prototypes -Wstrict-prototypes \
-			 -O2 -fomit-frame-pointer -std=gnu11 \
+			 -O3 -fomit-frame-pointer -std=gnu11 \
 			 -Wdeclaration-after-statement
 KBUILD_USERCFLAGS  := $(KBUILD_USERHOSTCFLAGS) $(USERCFLAGS)
 KBUILD_USERLDFLAGS := $(USERLDFLAGS)
@@ -491,7 +561,7 @@ export rust_common_flags := --edition=2021 \
 			    -Wclippy::dbg_macro
 
 KBUILD_HOSTCFLAGS   := $(KBUILD_USERHOSTCFLAGS) $(HOST_LFS_CFLAGS) $(HOSTCFLAGS)
-KBUILD_HOSTCXXFLAGS := -Wall -O2 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
+KBUILD_HOSTCXXFLAGS := -Wall -O3 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
 KBUILD_HOSTRUSTFLAGS := $(rust_common_flags) -O -Cstrip=debuginfo \
 			-Zallow-features= $(HOSTRUSTFLAGS)
 KBUILD_HOSTLDFLAGS  := $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
@@ -839,11 +909,11 @@ KBUILD_CFLAGS	+= $(call cc-disable-warning, format-overflow)
 KBUILD_CFLAGS	+= $(call cc-disable-warning, address-of-packed-member)
 
 ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE
-KBUILD_CFLAGS += -O2
-KBUILD_RUSTFLAGS += -Copt-level=2
+KBUILD_CFLAGS += -O3
+KBUILD_RUSTFLAGS += -Copt-level=3
 else ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
-KBUILD_CFLAGS += -Os
-KBUILD_RUSTFLAGS += -Copt-level=s
+KBUILD_CFLAGS += -O3
+KBUILD_RUSTFLAGS += -Copt-level=3
 endif
 
 # Always set `debug-assertions` and `overflow-checks` because their default
